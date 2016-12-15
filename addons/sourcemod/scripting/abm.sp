@@ -323,7 +323,6 @@ bool GetQRecord(int client) {
 			if (IsPlayerAlive(client)) {
 				GetClientAbsOrigin(client, g_origin);
 				g_QRecord.SetArray("origin", g_origin, sizeof(g_origin), true);
-				g_QRecord.SetValue("entity", 0, true);
 			}
 
 			g_QRecord.GetValue("client", g_client);
@@ -360,9 +359,7 @@ bool NewQRecord(int client) {
 	g_QRecord.SetValue("previd", client, true);
 	g_QRecord.SetValue("onteam", GetClientTeam(client), true);
 	g_QRecord.SetValue("queued", false, true);
-	g_QRecord.SetValue("entity", 0, true);
 	g_QRecord.SetString("model", "", true);
-	g_QRecord.SetString("authid", g_QKey, true);
 	return true;
 }
 
@@ -2048,7 +2045,7 @@ QDBCheckCmd(client) {
 			PrintToConsole(client, " - Origin: {%d.0, %d.0, %d.0}", x, y, z);
 			PrintToConsole(client, " - Status: %d", IsPlayerAlive(i));
 			PrintToConsole(client, " - Client: %d", g_client);
-			PrintToConsole(client, " - Manage: %d", g_target);
+			PrintToConsole(client, " - Target: %d", g_target);
 			PrintToConsole(client, " - PrevId: %d", g_lastid);
 			PrintToConsole(client, " - OnTeam: %d", g_onteam);
 			PrintToConsole(client, " - Queued: %d", g_queued);
