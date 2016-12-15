@@ -6,7 +6,7 @@ Thanks :)
 
 ## License
 
-ABM a SourceMod L4D2 Plugin  
+ABM a SourceMod L4D2 Plugin
 Copyright (C) 2016  Victor B. Gonzalez
 
 This program is free software; you can redistribute it and/or
@@ -48,7 +48,7 @@ ABM tries to respect targeting permissions.
 - L4D2 (cooperative)
 - A Linux dedicated server
 - A clean SourceMod installation
-- L4DToolz
+- L4DToolZ
 
 ## Why?
 

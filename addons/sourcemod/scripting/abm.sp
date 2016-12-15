@@ -609,8 +609,6 @@ int GetSafeClient(int client) {
 	for (int i = 1 ; i <= MaxClients ; i++) {
 		if (IsClientValid(i) && i != client) {
 			if (IsPlayerAlive(i) && GetClientTeam(i) == onteam) {
-
-				// we can spawn on nearly anybody but let's avoid this guy
 				if (GetEntProp(client, Prop_Send, "m_isHangingFromLedge") == 0) {
 					return i;
 				}
@@ -672,11 +670,7 @@ QuickCheat(int client, char [] cmd, char [] arg) {
 SwitchToBot(int client, int bot, bool si_ghost=true) {
 	DebugToFile(1, "SwitchToBot: %d %d %d", client, bot, si_ghost);
 
-	if (client == bot) {
-		return;
-	}
-
-	if (IsClientValid(bot)) {
+	if (client != bot && IsClientValid(bot)) {
 		int onteam = GetClientTeam(bot);
 
 		if (GetQRecord(client)) {
@@ -781,13 +775,11 @@ int CountTeamMates(int onteam, int mtype=2) {
 	for (int i = 1 ; i <= MaxClients ; i++) {
 		j = GetClientManager(i);
 
-		if (j >= 0) {
-			if (GetClientTeam(i) == onteam) {
-				switch (j) {
-					case -1: continue;
-					case 0: bots++;
-					default: humans++;
-				}
+		if (j >= 0 && GetClientTeam(i) == onteam) {
+			switch (j) {
+				case -1: continue;
+				case 0: bots++;
+				default: humans++;
 			}
 		}
 	}
