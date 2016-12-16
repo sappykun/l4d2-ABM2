@@ -26,7 +26,7 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.4"
+#define PLUGIN_VERSION "0.1.5"
 #define DEBUG 0
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
@@ -397,42 +397,29 @@ public FirstSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 		return;
 	}
 
-	StringMap R;
 	int onteam = GetClientTeam(client);
 
 	// assign the client if someone requested one
 	for (int i = 1 ; i <= MaxClients ; i++) {
 		if (GetQRecord(i)) {
-			R = g_QRecord;
+			g_QRecord.GetValue("queued", g_queued);
 
-			R.GetValue("queued", g_queued);
 			if (g_queued == true && g_onteam == onteam) {
-				R.SetValue("queued", false, true);
+				g_QRecord.SetValue("queued", false, true);
 				SwitchToBot(i, client);
 				break;
 			}
 		}
 	}
 
-	CreateTimer(0.1, FirstSpawnHookTimer, client);
+	if (onteam == 2 && CountTeamMates(2) > 4) {
+		CreateTimer(0.1, FirstSpawnHookTimer, client);
+	}
 }
 
 public Action FirstSpawnHookTimer(Handle timer, any client) {
 	DebugToFile(1, "FirstSpawnHookTimer");
-
-	if (CountTeamMates(2) > 4) {
-		// this can remove people from the leaderboard (press tab)
-		// let's make sure we don't mess with the first 4 people.
-		if (GetClientTeam(client) == 2) {
-			GetClientName(client, g_pN, sizeof(g_pN));
-
-			if (GetQRecord(client)) {
-				Format(g_pN, sizeof(g_pN), "%s", g_model);
-			}
-
-			AssignModel(client, g_pN);
-		}
-
+	if (IsClientValid(client)) {
 		AutoModelAssigner(client);
 	}
 }
