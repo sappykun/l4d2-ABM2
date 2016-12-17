@@ -1,4 +1,4 @@
-# ABM SourceMod plugin
+# ABM SourceMod Plugin
 
 If you enjoy SourceMod and its community or if you rely on it - please don't just be a vampire's anal cavity and help them out. Help them meet their monthly goal [here](http://sourcemod.net/donate.php) and don't be too proud to throw them some pocket change if that's all you got.
 
@@ -25,7 +25,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 ## About
 
-The ABM plugin helps add the 5th+ player to the cooperative experience in L4D2. It's been designed to "just work" with very little to no interaction on the admin's part short of dropping two files (abm.smx and abm.text) into their proper places. Once ABM is installed a 5+ player will spawn on their team equipped with a pump shotgun, baseball bat and an adrenaline shot (customizable). If any player in a 5+ campaign disconnects, their bot will disappear with them until the team size is at the minimum players required.
+The ABM plugin helps add the 5th+ player to the cooperative experience in L4D2. It's been designed to "just work" with very little to no interaction on the admin's part short of dropping two files (**abm.smx** and **abm.text**) into their proper places. Once ABM is installed a 5+ player will spawn on their team equipped with a pump shotgun, baseball bat and an adrenaline shot (customizable). If any player in a 5+ campaign disconnects, their bot will disappear with them until the team size is at the minimum players required.
 
 Players 1 through 8 should all be unique characters of the beloved series. If you start off with characters of the L4D1 series, new players will be of the L4D2 series and vice versa. Admins do have an interface in either the form of menus or chat commands. These "extras" were only implemented to help manually test some of the plugin's core functionality and are not the focal point of the plugin. Although the menus are helpful, the absolute core focus of the plugin is getting 5+ players to actually play together with as few bugs as is possible.
 
@@ -34,7 +34,7 @@ Players 1 through 8 should all be unique characters of the beloved series. If yo
 ABM tries to respect targeting permissions.
 
 - Add X number of bots to survivor/infected teams.
-- Remove X number of bots from survivor/infected teams
+- Remove X number of bots from survivor/infected teams.
 - Switch any client between idle, spectator, survivor and infected.
 - Switch to any available bot on survivor or infected.
 - Respawn any client onto themselves or onto any other client.

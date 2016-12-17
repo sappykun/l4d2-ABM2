@@ -27,14 +27,13 @@ Free Software Foundation, Inc.
 #include <sdkhooks>
 
 #define PLUGIN_VERSION "0.1.5"
-#define DEBUG 0
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 // menu parameters
 #define menuArgs g_menuItems[client]     // Global argument tracking for the menu system
 #define menuArg0 g_menuItems[client][0]  // GetItem(1...)
 #define menuArg1 g_menuItems[client][1]  // GetItem(2...)
-g_menuItems[MAXPLAYERS + 1][7];
+g_menuItems[MAXPLAYERS + 1][2];
 
 // menu tracking
 #define g_callBacks g_menuStack[client]
@@ -97,7 +96,7 @@ public Plugin myinfo= {
 public OnPluginStart() {
 	DebugToFile(1, "OnPluginStart");
 
-	HookEvent("player_first_spawn", FirstSpawnHook);
+	HookEvent("player_spawn", OnSpawnHook);
 	HookEvent("player_death", OnDeathHook);
 	HookEvent("player_connect", AddToQDBHook);
 	HookEvent("player_disconnect", CleanQDBHook);
@@ -384,8 +383,8 @@ int SetQRecord(int client) {
 	return result;
 }
 
-public FirstSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
-	DebugToFile(1, "FirstSpawnHook: %s", name);
+public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
+	DebugToFile(1, "OnSpawnHook: %s", name);
 
 	int userid = GetEventInt(event, "userid");
 	int client = GetClientOfUserId(userid);
@@ -413,12 +412,12 @@ public FirstSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 	}
 
 	if (onteam == 2 && CountTeamMates(2) > 4) {
-		CreateTimer(0.1, FirstSpawnHookTimer, client);
+		CreateTimer(0.1, OnSpawnHookTimer, client);
 	}
 }
 
-public Action FirstSpawnHookTimer(Handle timer, any client) {
-	DebugToFile(1, "FirstSpawnHookTimer");
+public Action OnSpawnHookTimer(Handle timer, any client) {
+	DebugToFile(1, "OnSpawnHookTimer");
 	if (IsClientValid(client)) {
 		AutoModelAssigner(client);
 	}
@@ -438,6 +437,7 @@ public OnDeathHook(Handle event, const char[] name, bool dontBroadcast) {
 
 		if (g_onteam == 3) {
 			g_QRecord.SetValue("target", g_client, true);
+			g_QRecord.SetValue("queued", true, true);
 		}
 
 		menuArg0 = playClient;
@@ -452,15 +452,12 @@ public QTeamHook(Handle event, const char[] name, bool dontBroadcast) {
 	int onteam = GetEventInt(event, "team");
 
 	if (GetQRecord(client)) {
-		StringMap R = g_QRecord;
-
-		R.SetValue("onteam", onteam, true);
-		R.SetValue("queued", false, true);
-
 		if (onteam >= 2) {
-			R.SetValue("target", client, true);
+			g_QRecord.SetValue("target", client, true);
+			g_QRecord.SetValue("onteam", onteam, true);
+
 			if (onteam == 3) {
-				R.SetString("model", "", true);
+				g_QRecord.SetString("model", "", true);
 			}
 		}
 	}
@@ -475,11 +472,10 @@ public QAfkHook(Handle event, const char[] name, bool dontBroadcast) {
 	int targetTeam = GetClientTeam(target);
 
 	if (GetQRecord(client)) {
-		StringMap R = g_QRecord;
 		int onteam = GetClientTeam(client);
 
 		if (onteam == 2) {
-			R.SetValue("target", target, true);
+			g_QRecord.SetValue("target", target, true);
 			AssignModel(target, g_model);
 		}
 	}
@@ -501,18 +497,16 @@ public QBakHook(Handle event, const char[] name, bool dontBroadcast) {
 	int target = GetClientOfUserId(GetEventInt(event, "bot"));
 
 	if (GetQRecord(client)) {
-		StringMap R = g_QRecord;
-
 		if (g_target != target) {
-			R.SetValue("previd", target);
-			R.SetValue("target", client);
+			g_QRecord.SetValue("previd", target);
+			g_QRecord.SetValue("target", client);
 
 			GetClientName(target, g_pN, sizeof(g_pN));
 			int i = GetModelIndexByName(g_pN);
 
 			if (i != -1) {
 				Format(g_model, sizeof(g_model), "%s", g_SurvivorNames[i]);
-				R.SetString("model", g_model, true);
+				g_QRecord.SetString("model", g_model, true);
 			}
 		}
 
@@ -610,11 +604,14 @@ bool AddSurvivor() {
 	int survivor = CreateFakeClient("SURVIVOR");
 
 	if (IsClientValid(survivor)) {
-		DispatchKeyValue(survivor, "classname", "SurvivorBot");
-		ChangeClientTeam(survivor, 2);
-		DispatchSpawn(survivor);
-		KickClient(survivor);
-		result = true;
+		if (DispatchKeyValue(survivor, "classname", "SurvivorBot")) {
+			ChangeClientTeam(survivor, 2);
+
+			if (DispatchSpawn(survivor)) {
+				KickClient(survivor);
+				result = true;
+			}
+		}
 	}
 
 	return result;
@@ -958,6 +955,10 @@ RmBots(int asmany, int onteam) {
 	if (onteam == 0) {
 		onteam = asmany;
 		asmany = MaxClients;
+	}
+
+	else if (asmany == -0) {
+		return;
 	}
 
 	else if (asmany < 0) {
@@ -1476,7 +1477,7 @@ public SwitchToBotHandler(int client, int level) {
 				}
 
 				else if (GetClientManager(menuArg1) == 0) {
-					SwitchToBot(menuArg0, menuArg1);
+					SwitchToBot(menuArg0, menuArg1, false);
 				}
 			}
 
