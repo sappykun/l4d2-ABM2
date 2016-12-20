@@ -26,7 +26,7 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.5"
+#define PLUGIN_VERSION "0.1.6"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 // menu parameters
@@ -76,6 +76,8 @@ ConVar g_cvThrowable;
 ConVar g_cvHealItem;
 ConVar g_cvConsumable;
 
+bool g_IsVs = false;
+char g_GameMode[16];
 int g_LogLevel;
 int g_ExtPlayers;
 int g_MinPlayers;
@@ -135,6 +137,9 @@ public OnPluginStart() {
 		}
 	}
 
+	FindConVar("mp_gamemode").GetString(g_GameMode, sizeof(g_GameMode));
+	g_IsVs = (StrEqual(g_GameMode, "versus") || StrEqual(g_GameMode, "scavenge"));
+
 	CreateConVar("abm_version", PLUGIN_VERSION, "ABM plugin version", FCVAR_DONTRECORD);
 	g_cvMinPlayers = CreateConVar("abm_minplayers", "4", "Survivors will never be less than this value");
 	g_cvPrimaryWeapon = CreateConVar("abm_primaryweapon", "shotgun_chrome", "5+ survivor primary weapon");
@@ -180,10 +185,15 @@ public OnClientPostAdminCheck(int client) {
 		if (SetQRecord(client) >= 0) {
 			PrintToServer("AUTH ID: %s, ADDED TO QDB.", g_QKey);
 
-			if (CountTeamMates(2, 2) >= g_MinPlayers) {
-				if (CountTeamMates(2, 0) == 0) {
+			int onteam = 2;
+			if (g_IsVs && CountTeamMates(3) < CountTeamMates(2)) {
+				onteam = 3;
+			}
+
+			if (!g_IsVs && CountTeamMates(onteam) >= 1) {
+				if (CountTeamMates(onteam, 0) == 0) {
 					g_ExtPlayers++;
-					NewBotTakeOver(client, 2);
+					NewBotTakeOver(client, onteam);
 				}
 			}
 		}
@@ -221,18 +231,17 @@ public CleanQDBHook(Handle event, const char[] name, bool dontBroadcast) {
 
 			if (g_ExtPlayers > 0) {
 				g_ExtPlayers--;
-				g_MinPlayers--;
 			}
 		}
 	}
-
-	CreateTimer(0.1, RmBotsTimer);
 }
 
 public Action RmBotsTimer(Handle timer) {
 	DebugToFile(3, "RmBotsTimer");
-	int m = g_MinPlayers + g_ExtPlayers;
-	RmBots(m * -1, 2);
+
+	if (!g_IsVs) {
+		RmBots((g_MinPlayers + g_ExtPlayers) * -1, 2);
+	}
 }
 
 bool IsAdmin(int client) {
@@ -293,6 +302,20 @@ int GetPlayClient(int client) {
 
 	else if (IsClientValid(client)) {
 		return client;
+	}
+
+	return -1;
+}
+
+int ClientHomeTeam(int client) {
+	DebugToFile(1, "ClientHomeTeam: %d", client);
+
+	if (GetQRecord(client)) {
+		return g_onteam;
+	}
+
+	else if (IsClientValid(client)) {
+		return GetClientTeam(client);
 	}
 
 	return -1;
@@ -411,7 +434,7 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 		}
 	}
 
-	if (onteam == 2 && CountTeamMates(2) > 4) {
+	if (onteam == 2 && CountTeamMates(onteam) > 4) {
 		CreateTimer(0.1, OnSpawnHookTimer, client);
 	}
 }
@@ -545,6 +568,17 @@ StripClientSlot(int client, int slot) {
 RespawnClient(int client, int target=0) {
 	DebugToFile(1, "RespawnClient: %d %d", client, target);
 
+	if (!IsClientValid(client)) {
+		return;
+	}
+
+	else if (GetQRecord(client)) {
+		if (g_onteam == 3) {
+			NewBotTakeOver(client, 3);
+			return;
+		}
+	}
+
 	float origin[3];
 	client = GetPlayClient(client);
 	target = GetPlayClient(target);
@@ -553,15 +587,13 @@ RespawnClient(int client, int target=0) {
 		target = client;
 	}
 
-	GetClientAbsOrigin(target, origin);
 	RoundRespawnSig(client);
-
+	GetClientAbsOrigin(target, origin);
 	QuickCheat(client, "give", g_PrimaryWeapon);
 	QuickCheat(client, "give", g_SecondaryWeapon);
 	QuickCheat(client, "give", g_Throwable);
 	QuickCheat(client, "give", g_HealItem);
 	QuickCheat(client, "give", g_Consumable);
-
 	TeleportEntity(client, origin, NULL_VECTOR, NULL_VECTOR);
 }
 
@@ -630,8 +662,8 @@ bool AddInfected() {
 	int special = CreateFakeClient("SPECIAL");
 	if (IsClientValid(special)) {
 		ChangeClientTeam(special, 3);
-		Format(g_sB, sizeof(g_sB), "%s auto area", si);
-		QuickCheat(special, "z_spawn", g_sB);
+		Format(g_sB, sizeof(g_sB), "%s auto", si);
+		QuickCheat(special, "z_spawn_old", g_sB);
 		KickClient(special);
 		result = true;
 	}
@@ -716,7 +748,7 @@ NewBotTakeOver(int client, int onteam) {
 
 		if (IsClientValid(g_target)) {
 			if (client != g_target && GetClientTeam(g_target) == onteam) {
-				SwitchToBot(client, g_target, false);
+				SwitchToBot(client, g_target);
 				return;
 			}
 		}
@@ -724,7 +756,7 @@ NewBotTakeOver(int client, int onteam) {
 		nextBot = GetNextBot(onteam);
 
 		if (nextBot >= 1) {
-			SwitchToBot(client, nextBot, false);
+			SwitchToBot(client, nextBot);
 			return;
 		}
 
@@ -748,6 +780,10 @@ int CountTeamMates(int onteam, int mtype=2) {
 	// mtype 1: counts only humans
 	// mtype 2: counts all players on team
 
+	if (mtype == 2) {
+		return GetTeamClientCount(onteam);
+	}
+
 	int j;
 	int result;
 	int humans;
@@ -758,7 +794,6 @@ int CountTeamMates(int onteam, int mtype=2) {
 
 		if (j >= 0 && GetClientTeam(i) == onteam) {
 			switch (j) {
-				case -1: continue;
 				case 0: bots++;
 				default: humans++;
 			}
@@ -768,7 +803,6 @@ int CountTeamMates(int onteam, int mtype=2) {
 	switch (mtype) {
 		case 0: result = bots;
 		case 1: result = humans;
-		case 2: result = humans + bots;
 	}
 
 	return result;
@@ -1456,6 +1490,7 @@ public Action SwitchToBotCmd(int client, args) {
 public SwitchToBotHandler(int client, int level) {
 	DebugToFile(1, "SwitchToBotHandler: %d %d", client, level);
 
+	int homeTeam = ClientHomeTeam(client);
 	Menu menu = new Menu(GenericMenuHandler);
 	if (!RegMenuHandler(client, "SwitchToBotHandler", level, 0)) {
 		return;
@@ -1466,17 +1501,19 @@ public SwitchToBotHandler(int client, int level) {
 		case 1: {
 			GetClientName(menuArg0, g_sB, sizeof(g_sB));
 			Format(g_sB, sizeof(g_sB), "%s: Takeover", g_sB);
-			TeamMatesMenu(client, menu, g_sB, 0, 1);
+			TeamMatesMenu(client, menu, g_sB, 0, 0, true, false, homeTeam);
 		}
 
 		case 2: {
 			if (CanClientTarget(client, menuArg0)) {
-				if (!IsAdmin(client) && GetClientTeam(menuArg1) == 3) {
-					GenericMenuCleaner(client);
-					return;
+				if (homeTeam != 3 && GetClientTeam(menuArg1) == 3) {
+					if (!IsAdmin(client)) {
+						GenericMenuCleaner(client);
+						return;
+					}
 				}
 
-				else if (GetClientManager(menuArg1) == 0) {
+				if (GetClientManager(menuArg1) == 0) {
 					SwitchToBot(menuArg0, menuArg1, false);
 				}
 			}
@@ -1902,17 +1939,18 @@ TeamsMenu(int client, Menu menu,  char [] title, bool all=true) {
 }
 
 TeamMatesMenu(int client, Menu menu,  char [] title, int mtype=2, int target=0, bool incDead=true,
-			  repeat=false) {
+			  bool repeat=false, int homeTeam=0) {
 	DebugToFile(1, "TeamMatesMenu: %d %s %d %d %d %d", client, title, mtype, target, incDead, repeat);
 
 	menu.SetTitle(title);
+	int isAdmin = IsAdmin(client);
 	char health[32];
 	bool mflag = false;
-	int hStatus;
+	int isAlive;
 	int playClient;
 	int bossClient;
 	int targetClient;
-	int j;
+	int manager;
 
 	for (int i = 1 ; i <= MaxClients ; i++) {
 		bossClient = i;
@@ -1925,31 +1963,31 @@ TeamMatesMenu(int client, Menu menu,  char [] title, int mtype=2, int target=0, 
 			}
 
 			if (IsClientValid(g_target) && g_target != i) {
-				hStatus = IsPlayerAlive(g_target);
+				isAlive = IsPlayerAlive(g_target);
 				playClient = g_target;
 			}
 
 			else {
-				hStatus = IsPlayerAlive(i);
+				isAlive = IsPlayerAlive(i);
 			}
 		}
 
 		else if (IsClientValid(i)) {
-			hStatus = IsPlayerAlive(i);
+			isAlive = IsPlayerAlive(i);
 
 			if (mtype == 0 || mtype == 2) {
 				mflag = true;
 			}
 
-			j = GetClientManager(i);
+			manager = GetClientManager(i);
 
-			if (j != 0) {
+			if (manager != 0) {
 				if (target == 0 || !repeat) {
 					mflag = false;
 					continue;
 				}
 
-				bossClient = j;
+				bossClient = manager;
 			}
 		}
 
@@ -1961,14 +1999,12 @@ TeamMatesMenu(int client, Menu menu,  char [] title, int mtype=2, int target=0, 
 		// bossClient is the human (if there is one)
 		// playClient is the bot (or human if not idle)
 
-		if (!hStatus && !incDead) {
+		if (!isAlive && !incDead) {
 			continue;
 		}
 
-		if (GetClientTeam(playClient) == 3) {
-			if (!IsAdmin(client)) {
-				continue;
-			}
+		if (GetClientTeam(playClient) != homeTeam && !isAdmin) {
+			continue;
 		}
 
 		switch(target) {
@@ -2012,6 +2048,7 @@ DebugToFile(int level, char [] format, any ...) {
 	if (g_LogLevel >= level) {
 		VFormat(g_dB, sizeof(g_dB), format, 3);
 		LogToFile(LOGFILE, g_dB);
+		PrintToServer("%s", g_dB);
 	}
 }
 
@@ -2019,6 +2056,7 @@ QDBCheckCmd(client) {
 	DebugToFile(1, "QDBCheckCmd");
 
 	PrintToConsole(client, "-- STAT: QDB Size is %d", g_QDB.Size);
+	PrintToConsole(client, "MinPlayers/ExtPlayers is %d/%d", g_MinPlayers, g_ExtPlayers);
 
 	for (int i = 1 ; i <= MaxClients ; i++) {
 		if (GetQRecord(i)) {
