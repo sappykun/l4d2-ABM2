@@ -26,7 +26,7 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.6"
+#define PLUGIN_VERSION "0.1.7"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 // menu parameters
@@ -87,6 +87,10 @@ char g_Throwable[64];
 char g_HealItem[64];
 char g_Consumable[64];
 
+ArrayList g_SIQ;
+new Handle:g_ADT = INVALID_HANDLE;  // the AssistantDirector timer
+bool g_CanSISpawn = true;
+
 public Plugin myinfo= {
 	name = "ABM",
 	author = "Victor B. Gonzalez",
@@ -107,6 +111,11 @@ public OnPluginStart() {
 	HookEvent("player_bot_replace", QAfkHook);
 	HookEvent("bot_player_replace", QBakHook);
 
+	// clean up the g_ADT timer and human spawns on SI in non-Vs
+	HookEvent("player_transitioned", RoundCleanUp, EventHookMode_Pre);
+	HookEvent("round_freeze_end", RoundCleanUp, EventHookMode_Pre);
+	//HookEvent("round_end", RoundCleanUp, EventHookMode_Pre);
+
 	RegAdminCmd("abm", MainMenuCmd, ADMFLAG_GENERIC);
 	RegAdminCmd("abm-menu", MainMenuCmd, ADMFLAG_GENERIC);
 	RegAdminCmd("abm-join", SwitchTeamCmd, ADMFLAG_GENERIC);
@@ -120,11 +129,14 @@ public OnPluginStart() {
 	RegAdminCmd("abm-info", QuickClientPrintCmd, ADMFLAG_GENERIC);
 	RegAdminCmd("abm-mk", MkBotsCmd, ADMFLAG_GENERIC);
 	RegAdminCmd("abm-rm", RmBotsCmd, ADMFLAG_GENERIC);
+
 	RegConsoleCmd("takeover", SwitchToBotCmd);
 	RegConsoleCmd("join", SwitchTeamCmd);
 
 	g_QDB = new StringMap();
 	g_QRecord = new StringMap();
+	g_ADT = INVALID_HANDLE;
+	g_SIQ = new ArrayList(3);
 
 	for (int i = 1 ; i <= MaxClients ; i++) {
 		g_menuStack[i] = new ArrayStack(128);
@@ -159,6 +171,76 @@ public OnPluginStart() {
 	UpdateConVarsHook(g_cvLogLevel, "0", "0");
 	UpdateConVarsHook(g_cvMinPlayers, "4", "4");
 	AutoExecConfig(true, "abm");
+}
+
+public RoundCleanUp(Handle event, const char[] name, bool dontBroadcast) {
+	DebugToFile(1, "RoundCleanUp: %s", name);
+
+	if (g_ADT != INVALID_HANDLE) {
+		KillTimer(g_ADT);
+		g_ADT = INVALID_HANDLE;
+	}
+
+	if (StrEqual(name, "player_transitioned")) {
+		int client = GetClientOfUserId(GetEventInt(event, "userid"));
+		if (GetQRecord(client) && g_onteam == 3) {
+			NewBotTakeOver(client, 3);
+			return;
+		}
+	}
+
+	if (StrEqual(name, "round_freeze_end")) {
+		for (int i = 1 ; i <= MaxClients ; i++) {
+			if (GetQRecord(i) && g_onteam == 3) {
+				ForcePlayerSuicide(i);
+				NewBotTakeOver(i, 3);
+			}
+		}
+
+		return;
+	}
+}
+
+public Action AssistantDirector(Handle timer) {
+	DebugToFile(1, "AssistantDirector");
+
+	if (g_SIQ.Length != 0) {
+		if (GetQRecord(g_SIQ.Get(0)) && g_onteam == 3) {
+			NewBotTakeOver(g_client, 3);
+		}
+
+		g_SIQ.Erase(0);
+	}
+
+	if (g_CanSISpawn) {
+		MkBots(CountTeamMates(2) * -1, 3);
+		return;
+	}
+// 	int multiplier = 1;
+// 	int survivorSize = CountTeamMates(2);
+// 	int asmany = (survivorSize * multiplier) * -1;
+// 	bool spawnUp = false;
+// 	static spawnLap;
+// 	spawnLap++;
+//
+// 	if (spawnLap >= 5 || spawnLap > survivorSize) {
+// 		spawnUp = true;
+// 		spawnLap = 1;
+// 	}
+//
+// 	if (g_CanSISpawn && spawnUp) {
+// 		MkBots(asmany, 3);
+// 		return;
+// 	}
+//
+// 	for (int i = 1 ; i <= MaxClients ; i++) {
+// 		if (GetQRecord(i) && g_onteam == 3) {
+// 			if (GetEntProp(i, Prop_Send, "m_isGhost") == 0) {
+// 				MkBots(asmany, 3);
+// 				return;
+// 			}
+// 		}
+// 	}
 }
 
 public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) {
@@ -423,12 +505,19 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 
 	// assign the client if someone requested one
 	for (int i = 1 ; i <= MaxClients ; i++) {
-		if (GetQRecord(i)) {
+		if (i != client && GetQRecord(i)) {
 			g_QRecord.GetValue("queued", g_queued);
 
 			if (g_queued == true && g_onteam == onteam) {
 				g_QRecord.SetValue("queued", false, true);
 				SwitchToBot(i, client);
+
+				if (g_onteam == 3 && !g_IsVs && g_ADT == INVALID_HANDLE) {
+					g_ADT = CreateTimer(5.0, AssistantDirector, _, TIMER_REPEAT);
+					g_CanSISpawn = true;
+					return;
+				}
+
 				break;
 			}
 		}
@@ -441,6 +530,7 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 
 public Action OnSpawnHookTimer(Handle timer, any client) {
 	DebugToFile(1, "OnSpawnHookTimer");
+
 	if (IsClientValid(client)) {
 		AutoModelAssigner(client);
 	}
@@ -461,6 +551,8 @@ public OnDeathHook(Handle event, const char[] name, bool dontBroadcast) {
 		if (g_onteam == 3) {
 			g_QRecord.SetValue("target", g_client, true);
 			g_QRecord.SetValue("queued", true, true);
+			g_SIQ.Push(g_client);
+			//ChangeClientTeam(g_client, 1);
 		}
 
 		menuArg0 = playClient;
@@ -493,6 +585,10 @@ public QAfkHook(Handle event, const char[] name, bool dontBroadcast) {
 	int target = GetClientOfUserId(GetEventInt(event, "bot"));
 	int clientTeam = GetClientTeam(client);
 	int targetTeam = GetClientTeam(target);
+
+	if (targetTeam == 3) {
+		return;
+	}
 
 	if (GetQRecord(client)) {
 		int onteam = GetClientTeam(client);
@@ -636,17 +732,58 @@ bool AddSurvivor() {
 	int survivor = CreateFakeClient("SURVIVOR");
 
 	if (IsClientValid(survivor)) {
-		if (DispatchKeyValue(survivor, "classname", "SurvivorBot")) {
-			ChangeClientTeam(survivor, 2);
+		ChangeClientTeam(survivor, 2);
 
+		if (DispatchKeyValue(survivor, "classname", "SurvivorBot")) {
 			if (DispatchSpawn(survivor)) {
-				KickClient(survivor);
+				CreateTimer(1.0, ClientKicker, survivor);
 				result = true;
 			}
 		}
 	}
 
 	return result;
+}
+
+public Action ClientKicker(Handle timer, client) {
+	DebugToFile(1, "ClientKicker: %d", client);
+	if (IsClientValid(client)) {
+		KickClient(client);
+	}
+}
+
+GhostsModeProtector(int state) {
+	// CAREFUL: 0 starts this function and you must close it with 1 or
+	// risk breaking things. Close this with 1 immediately when done.
+
+	// e.g.,
+	// GhostsModeProtector(0);
+	// z_spawn_old tank auto;
+	// GhostsModeProtector(1);
+
+	static ghosts[MAXPLAYERS + 1];
+
+	switch (state) {
+		case 0: {
+			for (int i = 1 ; i <= MaxClients ; i++) {
+				if (GetQRecord(i) && g_onteam == 3) {
+					if (GetEntProp(i, Prop_Send, "m_isGhost") == 1) {
+						SetEntProp(i, Prop_Send, "m_isGhost", 0);
+						ghosts[i] = 1;
+					}
+				}
+			}
+		}
+
+		case 1: {
+			for (int i = 1 ; i <= MaxClients ; i++) {
+				if (ghosts[i] == 1) {
+					SetEntProp(i, Prop_Send, "m_isGhost", 1);
+					ghosts[i] = 0;
+				}
+			}
+		}
+	}
 }
 
 bool AddInfected() {
@@ -663,8 +800,12 @@ bool AddInfected() {
 	if (IsClientValid(special)) {
 		ChangeClientTeam(special, 3);
 		Format(g_sB, sizeof(g_sB), "%s auto", si);
+
+		GhostsModeProtector(0);
 		QuickCheat(special, "z_spawn_old", g_sB);
 		KickClient(special);
+		GhostsModeProtector(1);
+
 		result = true;
 	}
 
@@ -1889,7 +2030,7 @@ InvSlotsMenu(int client, int target, Menu menu,  char [] title) {
 	char weapon[64];
 	menu.SetTitle(title);
 
-	for (new i = 0 ; i < 5 ; i++) {
+	for (int i = 0 ; i < 5 ; i++) {
 		IntToString(i, g_sB, sizeof(g_sB));
 		ent = GetPlayerWeaponSlot(target, i);
 
@@ -1909,7 +2050,7 @@ ModelsMenu(int client, Menu menu,  char [] title) {
 
 	menu.SetTitle(title);
 
-	for (new i = 0 ; i < sizeof(g_SurvivorNames) ; i++) {
+	for (int i = 0 ; i < sizeof(g_SurvivorNames) ; i++) {
 		IntToString(i, g_sB, sizeof(g_sB));
 		menu.AddItem(g_sB, g_SurvivorNames[i]);
 	}

@@ -1,6 +1,8 @@
 # ABM Change Log
 
-## [UNRELEASED]
+## [0.1.7] - 2016-12-22
+### Fixed
+- Windows servers should now be able to spawn up to 32 survivors
 
 ## [0.1.6] - 2016-12-19
 ### Added
