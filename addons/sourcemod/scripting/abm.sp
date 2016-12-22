@@ -26,7 +26,7 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.6"
+#define PLUGIN_VERSION "0.1.7"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 // menu parameters
@@ -636,9 +636,9 @@ bool AddSurvivor() {
 	int survivor = CreateFakeClient("SURVIVOR");
 
 	if (IsClientValid(survivor)) {
-		if (DispatchKeyValue(survivor, "classname", "SurvivorBot")) {
-			ChangeClientTeam(survivor, 2);
+		ChangeClientTeam(survivor, 2);
 
+		if (DispatchKeyValue(survivor, "classname", "SurvivorBot")) {
 			if (DispatchSpawn(survivor)) {
 				KickClient(survivor);
 				result = true;
