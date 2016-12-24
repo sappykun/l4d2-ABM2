@@ -1,5 +1,21 @@
 # ABM Change Log
 
+## [0.1.8] - 2016-12-23
+### Added
+- A GetOS function added to workaround the Zoey bug (Valve please fix?)
+- abm_zoey cvar introduced to workaround crashes on Windows
+- abm_zoey cvar is autodetected on Linux and new installations
+- Added OS to gamedata.txt
+
+### Changed
+- Changed player_spawn back to player_first_spawn (it was getting kind of crazy)
+- AutoModelAssigner changed to AutoModelTimer (and is a timer now)
+- The algorithm for assigning models is greatly improved
+
+### Removed
+- OnSpawnHookTimer is gone (was a middle man timer to the now AutoModelTimer)
+- Premature fix at spawning bots in version 0.1.7 is gone (Zoey was the problem)
+
 ## [0.1.7] - 2016-12-22
 ### Fixed
 - Windows servers should now be able to spawn up to 32 survivors

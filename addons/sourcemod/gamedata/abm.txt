@@ -1,11 +1,21 @@
 "Games" {
+
+	"#default" {
+		"Offsets" {
+			"OS" {	// Thank you Sammy-ROCK!
+				"windows" "1"	// Windows
+				"linux"   "0"	// Linux
+			}
+		}
+	}
+
     "left4dead2" {
 		"Signatures" {
-			"BecomeGhost" {
-				"library"	"server"
-				"linux"		"@_ZN13CTerrorPlayer11BecomeGhostEb"
-				"windows"	"\x55\x8B\xEC\x53\x8B\x5D\x2A\x56\x53\x8B\xF1\xE8\x2A\x2A\x2A\x2A\x84"
-			}
+			//"BecomeGhost" {
+			//	"library"	"server"
+			//	"linux"		"@_ZN13CTerrorPlayer11BecomeGhostEb"
+			//	"windows"	"\x55\x8B\xEC\x53\x8B\x5D\x2A\x56\x53\x8B\xF1\xE8\x2A\x2A\x2A\x2A\x84"
+			//}
 
 			"State_Transition" {
 				"library"	"server"
@@ -13,15 +23,15 @@
 				"windows"	"\x55\x8B\xEC\x56\x8B\xF1\x8B\x86\x2A\x2A\x2A\x2A\x57\x8B\x7D\x2A\x85\xC0\x74\x2A\x83"
 			}
 
-			"GoAwayFromKeyboard" {
-				"library"  "server"
-				"linux"    "@_ZN13CTerrorPlayer18GoAwayFromKeyboardEv"
-			}
+			//"GoAwayFromKeyboard" {
+			//	"library"	"server"
+			//	"linux"		"@_ZN13CTerrorPlayer18GoAwayFromKeyboardEv"
+			//}
 
 			"TakeOverZombieBot" {
-				"library"  "server"
-				"linux"    "@_ZN13CTerrorPlayer17TakeOverZombieBotEPS_"
-				"windows"  "\x55\x8B\xEC\x81\xEC\x2A\x2A\x2A\x2A\xA1\x58\x2A\x2A\x2A\x33\xC5\x89\x45\x2A\x53\x8B\x5D\x2A\x80"
+				"library"	"server"
+				"linux"		"@_ZN13CTerrorPlayer17TakeOverZombieBotEPS_"
+				"windows"	"\x55\x8B\xEC\x81\xEC\x2A\x2A\x2A\x2A\xA1\x58\x2A\x2A\x2A\x33\xC5\x89\x45\x2A\x53\x8B\x5D\x2A\x80"
 			}
 
 			"RoundRespawn" {
@@ -31,15 +41,15 @@
 			}
 
 			"SetHumanSpec" {
-				"library" "server"
-				"linux" "@_ZN11SurvivorBot17SetHumanSpectatorEP13CTerrorPlayer"
-				"windows" "\x55\x8B\xEC\x56\x8B\xF1\x83\xBE\x44\x43\x00\x00\x00\x7E\x07\x32\xC0\x5E\x5D\xC2\x04"
+				"library"	"server"
+				"linux"		"@_ZN11SurvivorBot17SetHumanSpectatorEP13CTerrorPlayer"
+				"windows"	"\x55\x8B\xEC\x56\x8B\xF1\x83\xBE\x44\x43\x00\x00\x00\x7E\x07\x32\xC0\x5E\x5D\xC2\x04"
 			}
 
 			"TakeOverBot" {
-				"library"  "server"
-				"linux"    "@_ZN13CTerrorPlayer11TakeOverBotEb"
-				"windows"  "\x55\x8B\xEC\x81\xEC\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x53\x56\x8D\x85"
+				"library"	"server"
+				"linux"		"@_ZN13CTerrorPlayer11TakeOverBotEb"
+				"windows"	"\x55\x8B\xEC\x81\xEC\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x53\x56\x8D\x85"
 			}
 		}
     }

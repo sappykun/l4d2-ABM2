@@ -26,7 +26,7 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.7"
+#define PLUGIN_VERSION "0.1.8"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 // menu parameters
@@ -75,6 +75,7 @@ ConVar g_cvSecondaryWeapon;
 ConVar g_cvThrowable;
 ConVar g_cvHealItem;
 ConVar g_cvConsumable;
+ConVar g_cvZoey;
 
 bool g_IsVs = false;
 char g_GameMode[16];
@@ -86,6 +87,7 @@ char g_SecondaryWeapon[64];
 char g_Throwable[64];
 char g_HealItem[64];
 char g_Consumable[64];
+int g_Zoey;
 
 public Plugin myinfo= {
 	name = "ABM",
@@ -98,7 +100,7 @@ public Plugin myinfo= {
 public OnPluginStart() {
 	DebugToFile(1, "OnPluginStart");
 
-	HookEvent("player_spawn", OnSpawnHook);
+	HookEvent("player_first_spawn", OnSpawnHook);
 	HookEvent("player_death", OnDeathHook);
 	HookEvent("player_connect", AddToQDBHook);
 	HookEvent("player_disconnect", CleanQDBHook);
@@ -149,6 +151,14 @@ public OnPluginStart() {
 	g_cvConsumable = CreateConVar("abm_consumable", "adrenaline", "5+ survivor consumable item");
 	g_cvLogLevel = CreateConVar("abm_loglevel", "0", "Level of debugging");
 
+	switch(GetOS()) {
+		case 0: Format(g_sB, sizeof(g_sB), "5");
+		case 1: Format(g_sB, sizeof(g_sB), "1");
+		default: PrintToChatAll("Zoey has gone Sarah Palin");
+	}
+
+	g_cvZoey = CreateConVar("abm_zoey", g_sB, "0:Nick 1:Rochelle 2:Coach 3:Ellis 4:Bill 5:Zoey 6:Francis 7:Louis");
+
 	HookConVarChange(g_cvLogLevel, UpdateConVarsHook);
 	HookConVarChange(g_cvMinPlayers, UpdateConVarsHook);
 	HookConVarChange(g_cvPrimaryWeapon, UpdateConVarsHook);
@@ -156,8 +166,10 @@ public OnPluginStart() {
 	HookConVarChange(g_cvThrowable, UpdateConVarsHook);
 	HookConVarChange(g_cvHealItem, UpdateConVarsHook);
 	HookConVarChange(g_cvConsumable, UpdateConVarsHook);
-	UpdateConVarsHook(g_cvLogLevel, "0", "0");
-	UpdateConVarsHook(g_cvMinPlayers, "4", "4");
+	HookConVarChange(g_cvZoey, UpdateConVarsHook);
+	//UpdateConVarsHook(g_cvLogLevel, "0", "0");
+	//UpdateConVarsHook(g_cvMinPlayers, "4", "4");
+	UpdateConVarsHook(g_cvZoey, "1", "1");
 	AutoExecConfig(true, "abm");
 }
 
@@ -171,6 +183,11 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
 	GetConVarString(g_cvThrowable, g_Throwable, sizeof(g_Throwable));
 	GetConVarString(g_cvHealItem, g_HealItem, sizeof(g_HealItem));
 	GetConVarString(g_cvConsumable, g_Consumable, sizeof(g_Consumable));
+
+	switch(GetOS()) {  // Zoey hates Windows :'(
+		case 0: g_Zoey = 5;
+		default: g_Zoey = GetConVarInt(g_cvZoey);
+	}
 }
 
 public OnConfigsExecuted() {
@@ -434,15 +451,8 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 		}
 	}
 
-	if (onteam == 2 && CountTeamMates(onteam) > 4) {
-		CreateTimer(0.1, OnSpawnHookTimer, client);
-	}
-}
-
-public Action OnSpawnHookTimer(Handle timer, any client) {
-	DebugToFile(1, "OnSpawnHookTimer");
-	if (IsClientValid(client)) {
-		AutoModelAssigner(client);
+	if (onteam == 2 && CountTeamMates(onteam) > 5) {
+		CreateTimer(0.1, AutoModelTimer, client);
 	}
 }
 
@@ -636,24 +646,16 @@ bool AddSurvivor() {
 	int survivor = CreateFakeClient("SURVIVOR");
 
 	if (IsClientValid(survivor)) {
-		ChangeClientTeam(survivor, 2);
-
 		if (DispatchKeyValue(survivor, "classname", "SurvivorBot")) {
 			if (DispatchSpawn(survivor)) {
-				CreateTimer(1.0, ClientKicker, survivor);
+				ChangeClientTeam(survivor, 2);
+				KickClient(survivor);
 				result = true;
 			}
 		}
 	}
 
 	return result;
-}
-
-public Action ClientKicker(Handle timer, client) {
-	DebugToFile(1, "ClientKicker: %d", client);
-	if (IsClientValid(client)) {
-		KickClient(client);
-	}
 }
 
 bool AddInfected() {
@@ -1031,50 +1033,55 @@ RmBots(int asmany, int onteam) {
 // MODEL FEATURES
 // ================================================================== //
 
-AutoModelAssigner(int client) {
-	DebugToFile(1, "AutoModelAssigner: %d", client);
+public Action AutoModelTimer(Handle timer, any client) {
+	DebugToFile(1, "AutoModelTimer: %d", client);
 
-	if (GetClientTeam(client) != 2) {
-		return;
-	}
+	int smq[8];  // survivor model queue
+	static lastClient;
+	static model;
 
-	int j;
-	int k = GetClientModelIndex(client);
-	static ModelsInPlay[8];
+	if (lastClient != client) {
+		lastClient = client;
 
-	for (int i = 0 ; i < sizeof(ModelsInPlay) ; i++) {
-		ModelsInPlay[i] = 0;
-	}
+		for (int i = 1 ; i <= MaxClients ; i++) {
+			if (i != client && IsClientValid(i) && GetClientTeam(i) == 2) {
+				smq[GetClientModelIndex(i)]++;
+			}
+		}
 
-	for (int i = 1 ; i <= MaxClients ; i++) {
-		if (IsClientValid(i)) {
-			if (GetClientTeam(i) == 2) {
-				j = GetClientModelIndex(i);
+		if (g_Zoey != 5) {
+			int partners = smq[g_Zoey] + smq[5];
 
-				if (j != -1) {
-					ModelsInPlay[j]++;
+			if (partners > 1) {
+				smq[5] = partners / 2;
+
+				if (smq[g_Zoey] % 2 == 0) {
+					smq[g_Zoey] = smq[5];
+				}
+
+				else if (smq[g_Zoey] / 2 > 0) {
+					smq[g_Zoey] = smq[g_Zoey] - smq[5];
+				}
+			}
+		}
+
+		for (int i = 0 ; i <= (MaxClients / 8) ; i++) {
+			for (model = 0 ; model < 8 ; model++) {
+				if (smq[model] <= i) {
+
+					if (model == 5 && g_Zoey != 5) {
+						model = g_Zoey;
+					}
+
+					i = MaxClients;
+					break;
 				}
 			}
 		}
 	}
 
-	if (j != -1) {
-		if (ModelsInPlay[k] == 1) {
-			return;
-		}
-	}
-
-	j = 0;
-	while (j < 3) {
-		for (int i = 0 ; i < sizeof(ModelsInPlay) ; i++) {
-			if (ModelsInPlay[i] == j) {
-				AssignModel(client, g_SurvivorNames[i]);
-				return;
-			}
-		}
-
-		j++;
-	}
+	AssignModel(client, g_SurvivorNames[model]);
+	return Plugin_Handled;
 }
 
 PrecacheModels() {
@@ -1160,6 +1167,16 @@ bool IsClientsModel(int client, char [] name) {
 // ================================================================== //
 // BLACK MAGIC SIGNATURES. SOME SPOOKY SHIT.
 // ================================================================== //
+
+int GetOS() {
+	DebugToFile(1, "GetOS");
+
+	Handle hGameConf = LoadGameConfigFile("abm");
+	int result = GameConfGetOffset(hGameConf, "OS");
+	CloseHandle(hGameConf);
+	return result;  // 0: Linux 1: Windows
+}
+
 
 void RoundRespawnSig(int client) {
 	DebugToFile(1, "RoundRespawnSig: %d", client);
