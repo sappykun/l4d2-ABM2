@@ -26,8 +26,10 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.8"
+#define PLUGIN_VERSION "0.1.9"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
+
+int g_OS;  // no one wants to do OS specific stuff but a bug on Windows crashes the server
 
 // menu parameters
 #define menuArgs g_menuItems[client]     // Global argument tracking for the menu system
@@ -102,7 +104,6 @@ public OnPluginStart() {
 
 	HookEvent("player_first_spawn", OnSpawnHook);
 	HookEvent("player_death", OnDeathHook);
-	HookEvent("player_connect", AddToQDBHook);
 	HookEvent("player_disconnect", CleanQDBHook);
 	HookEvent("player_afk", GoIdleHook);
 	HookEvent("player_team", QTeamHook);
@@ -125,6 +126,7 @@ public OnPluginStart() {
 	RegConsoleCmd("takeover", SwitchToBotCmd);
 	RegConsoleCmd("join", SwitchTeamCmd);
 
+	g_OS = GetOS();  // 0: Linux 1: Windows
 	g_QDB = new StringMap();
 	g_QRecord = new StringMap();
 
@@ -151,7 +153,7 @@ public OnPluginStart() {
 	g_cvConsumable = CreateConVar("abm_consumable", "adrenaline", "5+ survivor consumable item");
 	g_cvLogLevel = CreateConVar("abm_loglevel", "0", "Level of debugging");
 
-	switch(GetOS()) {
+	switch(g_OS) {
 		case 0: Format(g_sB, sizeof(g_sB), "5");
 		case 1: Format(g_sB, sizeof(g_sB), "1");
 		default: PrintToChatAll("Zoey has gone Sarah Palin");
@@ -160,17 +162,32 @@ public OnPluginStart() {
 	g_cvZoey = CreateConVar("abm_zoey", g_sB, "0:Nick 1:Rochelle 2:Coach 3:Ellis 4:Bill 5:Zoey 6:Francis 7:Louis");
 
 	HookConVarChange(g_cvLogLevel, UpdateConVarsHook);
-	HookConVarChange(g_cvMinPlayers, UpdateConVarsHook);
+	HookConVarChange(g_cvMinPlayers, UpdateMinPlayersHook);
 	HookConVarChange(g_cvPrimaryWeapon, UpdateConVarsHook);
 	HookConVarChange(g_cvSecondaryWeapon, UpdateConVarsHook);
 	HookConVarChange(g_cvThrowable, UpdateConVarsHook);
 	HookConVarChange(g_cvHealItem, UpdateConVarsHook);
 	HookConVarChange(g_cvConsumable, UpdateConVarsHook);
 	HookConVarChange(g_cvZoey, UpdateConVarsHook);
-	//UpdateConVarsHook(g_cvLogLevel, "0", "0");
-	//UpdateConVarsHook(g_cvMinPlayers, "4", "4");
-	UpdateConVarsHook(g_cvZoey, "1", "1");
+	UpdateConVarsHook(g_cvLogLevel, "0", "0");
+	UpdateConVarsHook(g_cvMinPlayers, "4", "4");
+	UpdateConVarsHook(g_cvZoey, g_sB, g_sB);
 	AutoExecConfig(true, "abm");
+}
+
+public UpdateMinPlayersHook(Handle convar, const char[] oldCv, const char[] newCv) {
+	DebugToFile(1, "UpdateMinPlayersHook: %s %s", oldCv, newCv);
+
+	g_MinPlayers = GetConVarInt(g_cvMinPlayers);
+	int mates = CountTeamMates(2);
+	int diff = mates - g_MinPlayers;
+
+	switch(diff > 0) {
+		case 1: g_ExtPlayers = mates - g_MinPlayers;
+		case 0: g_ExtPlayers = 0;
+	}
+
+	CreateTimer(0.1, RmBotsTimer);
 }
 
 public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) {
@@ -184,7 +201,7 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
 	GetConVarString(g_cvHealItem, g_HealItem, sizeof(g_HealItem));
 	GetConVarString(g_cvConsumable, g_Consumable, sizeof(g_Consumable));
 
-	switch(GetOS()) {  // Zoey hates Windows :'(
+	switch(g_OS) {  // Zoey hates Windows :'(
 		case 0: g_Zoey = 5;
 		default: g_Zoey = GetConVarInt(g_cvZoey);
 	}
@@ -209,7 +226,6 @@ public OnClientPostAdminCheck(int client) {
 
 			if (!g_IsVs && CountTeamMates(onteam) >= 1) {
 				if (CountTeamMates(onteam, 0) == 0) {
-					g_ExtPlayers++;
 					NewBotTakeOver(client, onteam);
 				}
 			}
@@ -233,11 +249,6 @@ GoIdle(int client) {
 	}
 }
 
-public AddToQDBHook(Handle event, const char[] name, bool dontBroadcast) {
-	DebugToFile(1, "AddToQDBHook: %s", name);
-	CreateTimer(0.1, RmBotsTimer);
-}
-
 public CleanQDBHook(Handle event, const char[] name, bool dontBroadcast) {
 	DebugToFile(1, "CleanQDBHook: %s", name);
 	int client = GetClientOfUserId(GetEventInt(event, "userid"));
@@ -245,10 +256,7 @@ public CleanQDBHook(Handle event, const char[] name, bool dontBroadcast) {
 	if (GetQRecord(client)) {
 		if (g_QDB.Remove(g_QKey)) {
 			PrintToServer("AUTH ID: %s, REMOVED FROM QDB.", g_QKey);
-
-			if (g_ExtPlayers > 0) {
-				g_ExtPlayers--;
-			}
+			CreateTimer(0.1, RmBotsTimer);
 		}
 	}
 }
@@ -451,8 +459,12 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 		}
 	}
 
-	if (onteam == 2 && CountTeamMates(onteam) > 5) {
-		CreateTimer(0.1, AutoModelTimer, client);
+	if (onteam == 2) {
+		CreateTimer(0.1, RmBotsTimer);
+
+		if (CountTeamMates(onteam) > 4) {
+			CreateTimer(0.1, AutoModelTimer, client);
+		}
 	}
 }
 
@@ -647,8 +659,8 @@ bool AddSurvivor() {
 
 	if (IsClientValid(survivor)) {
 		if (DispatchKeyValue(survivor, "classname", "SurvivorBot")) {
+			ChangeClientTeam(survivor, 2);
 			if (DispatchSpawn(survivor)) {
-				ChangeClientTeam(survivor, 2);
 				KickClient(survivor);
 				result = true;
 			}
@@ -952,16 +964,38 @@ MkBots(int asmany, int onteam) {
 		asmany = asmany * -1 - CountTeamMates(onteam);
 	}
 
-	if (onteam == 2) {
-		g_MinPlayers = CountTeamMates(onteam) + asmany;
-	}
-
 	for (int i = 1 ; i <= asmany ; i++) {
 		switch (onteam) {
-			case 2: AddSurvivor();
+			case 2: {
+				CreateTimer(0.1, MkBotsTimer, asmany, TIMER_REPEAT);
+				return;
+			}
+
 			case 3: AddInfected();
 		}
 	}
+}
+
+public Action MkBotsTimer(Handle timer, any asmany) {
+	DebugToFile(1, "MkBotsTimer: %d", asmany);
+	static i;
+
+	if (i++ < asmany) {
+		if (AddSurvivor()) {
+			if (CountTeamMates(2) > g_MinPlayers) {
+				g_ExtPlayers++;
+			}
+		}
+
+		return Plugin_Continue;
+	}
+
+	if (g_ExtPlayers - g_MinPlayers > MaxClients) {
+		g_ExtPlayers = MaxClients - g_MinPlayers;
+	}
+
+	i = 0;
+	return Plugin_Stop;
 }
 
 public Action RmBotsCmd(int client, args) {
@@ -1013,6 +1047,7 @@ RmBots(int asmany, int onteam) {
 
 	for (int i = MaxClients ; i >= 1 ; i--) {
 		if (GetClientManager(i) == 0 && GetClientTeam(i) == onteam) {
+
 			j++;
 			StripClient(i);
 			KickClient(i);
@@ -1024,9 +1059,12 @@ RmBots(int asmany, int onteam) {
 	}
 
 	if (onteam == 2) {
-		g_MinPlayers = CountTeamMates(onteam) - j;
-	}
+		g_ExtPlayers -= j;
 
+		if (g_ExtPlayers < 0) {
+			g_ExtPlayers = 0;
+		}
+	}
 }
 
 // ================================================================== //
@@ -1036,46 +1074,33 @@ RmBots(int asmany, int onteam) {
 public Action AutoModelTimer(Handle timer, any client) {
 	DebugToFile(1, "AutoModelTimer: %d", client);
 
+	if (GetClientManager(client) != 0) {
+		return Plugin_Handled;
+	}
+
 	int smq[8];  // survivor model queue
-	static lastClient;
-	static model;
+	int model = GetClientModelIndex(client);
 
-	if (lastClient != client) {
-		lastClient = client;
-
-		for (int i = 1 ; i <= MaxClients ; i++) {
-			if (i != client && IsClientValid(i) && GetClientTeam(i) == 2) {
-				smq[GetClientModelIndex(i)]++;
-			}
+	for (int i = 1 ; i <= MaxClients ; i++) {
+		if (IsClientValid(i) && GetClientTeam(i) == 2) {
+			smq[GetClientModelIndex(i)]++;
 		}
+	}
 
-		if (g_Zoey != 5) {
-			int partners = smq[g_Zoey] + smq[5];
+	if (smq[model] <= 1 || smq[model] <= CountTeamMates(2) / 8) {
+		return Plugin_Handled;
+	}
 
-			if (partners > 1) {
-				smq[5] = partners / 2;
+	for (int i = 1 ; i <= (MaxClients / 8) + 1 ; i++) {
+		for (model = 0 ; model < 8 ; model++) {
 
-				if (smq[g_Zoey] % 2 == 0) {
-					smq[g_Zoey] = smq[5];
-				}
-
-				else if (smq[g_Zoey] / 2 > 0) {
-					smq[g_Zoey] = smq[g_Zoey] - smq[5];
-				}
+			if (g_OS == 1 && model == 5) {
+				continue;
 			}
-		}
 
-		for (int i = 0 ; i <= (MaxClients / 8) ; i++) {
-			for (model = 0 ; model < 8 ; model++) {
-				if (smq[model] <= i) {
-
-					if (model == 5 && g_Zoey != 5) {
-						model = g_Zoey;
-					}
-
-					i = MaxClients;
-					break;
-				}
+			if (smq[model] < i) {
+				AssignModel(client, g_SurvivorNames[model]);
+				return Plugin_Handled;
 			}
 		}
 	}
@@ -1107,7 +1132,12 @@ AssignModel(int client, char [] model) {
 		int i = GetModelIndexByName(model);
 
 		if (i >= 0 && i < sizeof(g_SurvivorPaths)) {
-			SetEntProp(client, Prop_Send, "m_survivorCharacter", i);
+
+			switch(i == 5) {
+				case 1: SetEntProp(client, Prop_Send, "m_survivorCharacter", g_Zoey);
+				case 0: SetEntProp(client, Prop_Send, "m_survivorCharacter", i);
+			}
+
 			SetEntityModel(client, g_SurvivorPaths[i]);
 			Format(g_pN, sizeof(g_pN), "%s", g_SurvivorNames[i]);
 

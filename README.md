@@ -149,6 +149,7 @@ abm_primaryweapon "shotgun_chrome"  5+ survivor primary weapon
 abm_secondaryweapon "baseball_bat"  5+ survivor secondary weapon
 abm_throwable ""                    5+ survivor throwable item
 abm_loglevel "0"                    logging level of the plugin
+abm_zoey "1"						this is auto-detected on Linux
 ```
 
 ### Checking the ABM version
@@ -206,7 +207,7 @@ Spectators and playing teams can't talk with one another by default. If you'd li
 - Cycling through bots too fast can make them vaporize
 - Defibs may do some strange things (see [this](https://forums.alliedmods.net/showthread.php?t=118723))
 - Witchs may target the wrong player (see [this](https://forums.alliedmods.net/showthread.php?t=121945))
-- Adding a large number of bots on Windows can crash the server
+- abm_zoey 5 on Windows will most likely crash the server (also changing your model to Zoey on Windows may crash the server)
 
 ## What Next?
 

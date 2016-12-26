@@ -1,5 +1,20 @@
 # ABM Change Log
 
+## [0.1.9] = 2016-12-26
+### Added
+- ABM should now detect the OS on a new installation to avoid a crash on Windows
+- MkBotsTimer (spawning survivors too fast screwed up the counting of team mates)
+- Better Zoey support (if one spawns naturally, we won't try to change its netprop)
+- You can change your model to Zoey on Windows but it's just a model (no voice, icon, etc)
+- An UpdateMinPlayersHook watches for changes to abm_minplayers and updates extra players
+
+### Changed
+- Spawning survivors now works using a timer (they spawn in at 0.1 each)
+- abm_minplayers should be better at staying on top of the minimum player base
+
+### Removed
+- AddToQDBHook (moved the RmBotsTimer to CleanQDBHook)
+
 ## [0.1.8] - 2016-12-23
 ### Added
 - A GetOS function added to workaround the Zoey bug (Valve please fix?)
