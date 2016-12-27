@@ -1,6 +1,13 @@
 # ABM Change Log
 
-## [0.1.9] = 2016-12-26
+## [0.1.10] - 2016-12-26
+### Fixed
+- Several regressions due to the rewrites for Zoey's workaround should be fixed in this release
+
+### Removed
+- g_ExtPlayers purpose replaced with g_WasPlayers which only changes upon updating abm_minplayers
+
+## [0.1.9] - 2016-12-26
 ### Added
 - ABM should now detect the OS on a new installation to avoid a crash on Windows
 - MkBotsTimer (spawning survivors too fast screwed up the counting of team mates)

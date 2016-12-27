@@ -26,7 +26,7 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.9"
+#define PLUGIN_VERSION "0.1.10"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 int g_OS;  // no one wants to do OS specific stuff but a bug on Windows crashes the server
@@ -82,7 +82,7 @@ ConVar g_cvZoey;
 bool g_IsVs = false;
 char g_GameMode[16];
 int g_LogLevel;
-int g_ExtPlayers;
+int g_WasPlayers;
 int g_MinPlayers;
 char g_PrimaryWeapon[64];
 char g_SecondaryWeapon[64];
@@ -179,15 +179,8 @@ public UpdateMinPlayersHook(Handle convar, const char[] oldCv, const char[] newC
 	DebugToFile(1, "UpdateMinPlayersHook: %s %s", oldCv, newCv);
 
 	g_MinPlayers = GetConVarInt(g_cvMinPlayers);
-	int mates = CountTeamMates(2);
-	int diff = mates - g_MinPlayers;
-
-	switch(diff > 0) {
-		case 1: g_ExtPlayers = mates - g_MinPlayers;
-		case 0: g_ExtPlayers = 0;
-	}
-
-	CreateTimer(0.1, RmBotsTimer);
+	g_WasPlayers = g_MinPlayers;
+	CreateTimer(0.2, RmBotsTimer, g_MinPlayers * -1);
 }
 
 public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) {
@@ -195,6 +188,8 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
 
 	g_LogLevel = GetConVarInt(g_cvLogLevel);
 	g_MinPlayers = GetConVarInt(g_cvMinPlayers);
+	g_WasPlayers = g_MinPlayers;
+
 	GetConVarString(g_cvPrimaryWeapon, g_PrimaryWeapon, sizeof(g_PrimaryWeapon));
 	GetConVarString(g_cvSecondaryWeapon, g_SecondaryWeapon, sizeof(g_SecondaryWeapon));
 	GetConVarString(g_cvThrowable, g_Throwable, sizeof(g_Throwable));
@@ -227,6 +222,7 @@ public OnClientPostAdminCheck(int client) {
 			if (!g_IsVs && CountTeamMates(onteam) >= 1) {
 				if (CountTeamMates(onteam, 0) == 0) {
 					NewBotTakeOver(client, onteam);
+					g_MinPlayers++;
 				}
 			}
 		}
@@ -256,16 +252,20 @@ public CleanQDBHook(Handle event, const char[] name, bool dontBroadcast) {
 	if (GetQRecord(client)) {
 		if (g_QDB.Remove(g_QKey)) {
 			PrintToServer("AUTH ID: %s, REMOVED FROM QDB.", g_QKey);
-			CreateTimer(0.1, RmBotsTimer);
+
+			if (g_WasPlayers < g_MinPlayers) {
+				g_MinPlayers--;
+				CreateTimer(0.2, RmBotsTimer, 1);
+			}
 		}
 	}
 }
 
-public Action RmBotsTimer(Handle timer) {
+public Action RmBotsTimer(Handle timer, any asmany) {
 	DebugToFile(3, "RmBotsTimer");
 
 	if (!g_IsVs) {
-		RmBots((g_MinPlayers + g_ExtPlayers) * -1, 2);
+		RmBots(asmany, 2);
 	}
 }
 
@@ -444,9 +444,13 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 		return;
 	}
 
+	// assign a model
 	int onteam = GetClientTeam(client);
+	if (onteam == 2 && CountTeamMates(onteam) > 4) {
+		CreateTimer(0.1, AutoModelTimer, client);
+	}
 
-	// assign the client if someone requested one
+	// assign a client
 	for (int i = 1 ; i <= MaxClients ; i++) {
 		if (GetQRecord(i)) {
 			g_QRecord.GetValue("queued", g_queued);
@@ -456,14 +460,6 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 				SwitchToBot(i, client);
 				break;
 			}
-		}
-	}
-
-	if (onteam == 2) {
-		CreateTimer(0.1, RmBotsTimer);
-
-		if (CountTeamMates(onteam) > 4) {
-			CreateTimer(0.1, AutoModelTimer, client);
 		}
 	}
 }
@@ -660,6 +656,7 @@ bool AddSurvivor() {
 	if (IsClientValid(survivor)) {
 		if (DispatchKeyValue(survivor, "classname", "SurvivorBot")) {
 			ChangeClientTeam(survivor, 2);
+
 			if (DispatchSpawn(survivor)) {
 				KickClient(survivor);
 				result = true;
@@ -981,17 +978,8 @@ public Action MkBotsTimer(Handle timer, any asmany) {
 	static i;
 
 	if (i++ < asmany) {
-		if (AddSurvivor()) {
-			if (CountTeamMates(2) > g_MinPlayers) {
-				g_ExtPlayers++;
-			}
-		}
-
+		AddSurvivor();
 		return Plugin_Continue;
-	}
-
-	if (g_ExtPlayers - g_MinPlayers > MaxClients) {
-		g_ExtPlayers = MaxClients - g_MinPlayers;
 	}
 
 	i = 0;
@@ -1057,14 +1045,6 @@ RmBots(int asmany, int onteam) {
 			}
 		}
 	}
-
-	if (onteam == 2) {
-		g_ExtPlayers -= j;
-
-		if (g_ExtPlayers < 0) {
-			g_ExtPlayers = 0;
-		}
-	}
 }
 
 // ================================================================== //
@@ -1074,20 +1054,29 @@ RmBots(int asmany, int onteam) {
 public Action AutoModelTimer(Handle timer, any client) {
 	DebugToFile(1, "AutoModelTimer: %d", client);
 
-	if (GetClientManager(client) != 0) {
+	if (GetClientManager(client) > 0) {
 		return Plugin_Handled;
 	}
 
 	int smq[8];  // survivor model queue
-	int model = GetClientModelIndex(client);
+	int model;
+	int count;
 
 	for (int i = 1 ; i <= MaxClients ; i++) {
 		if (IsClientValid(i) && GetClientTeam(i) == 2) {
-			smq[GetClientModelIndex(i)]++;
+			model = GetClientModelIndex(i);
+
+			if (model != -1) {
+				smq[model]++;
+			}
 		}
 	}
 
-	if (smq[model] <= 1 || smq[model] <= CountTeamMates(2) / 8) {
+	model = GetClientModelIndex(client);
+	if (model == -1) model = 0;
+	count = smq[model];
+
+	if (count <= 1 || count <= CountTeamMates(2) / 8) {
 		return Plugin_Handled;
 	}
 
@@ -1099,8 +1088,8 @@ public Action AutoModelTimer(Handle timer, any client) {
 			}
 
 			if (smq[model] < i) {
-				AssignModel(client, g_SurvivorNames[model]);
-				return Plugin_Handled;
+				i = MaxClients;
+				break;
 			}
 		}
 	}
@@ -2110,7 +2099,7 @@ QDBCheckCmd(client) {
 	DebugToFile(1, "QDBCheckCmd");
 
 	PrintToConsole(client, "-- STAT: QDB Size is %d", g_QDB.Size);
-	PrintToConsole(client, "MinPlayers/ExtPlayers is %d/%d", g_MinPlayers, g_ExtPlayers);
+	PrintToConsole(client, "-- MinPlayers is %d", g_MinPlayers);
 
 	for (int i = 1 ; i <= MaxClients ; i++) {
 		if (GetQRecord(i)) {
