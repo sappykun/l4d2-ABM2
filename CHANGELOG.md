@@ -1,5 +1,24 @@
 # ABM Change Log
 
+## [0.1.12] - 2017-01-01
+### Fixed
+- Last of the regressions due to Zoey should be fixed in this release (please God)
+- Least amount of duplicates across Windows and Linux (e.g, abm-mk -32 2)
+- Players should never idle more than 1 bot
+- Player models should be remembered better
+- Players 5 through 8 should be unique again
+
+### Added
+- QDB entries have a new key "g_automd" to flag if a client has been auto modeled
+
+### Changed
+- GetClientManager has been rewritten to hopefully squash an idling bug
+
+## [0.1.11] - 2017-01-01
+### Fixed
+- Don't try applying models to an invalid client
+- Don't assume a client selected from a menu is actually valid
+
 ## [0.1.10] - 2016-12-26
 ### Fixed
 - Several regressions due to the rewrites for Zoey's workaround should be fixed in this release

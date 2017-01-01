@@ -66,7 +66,7 @@ At this point menus help troubleshoot if something is broke, or broke broke.
 
 ### Prerequisites
 
-If you already have a way to unreserve your server and already have extra slots you do not need to follow this step. You can skip this if you're good to go.
+You can skip the prerequisite here if you already have a way to unreserve your server or if you want all the other features that ABM provides (without the extra players).
 
 - Install [L4DToolZ](https://forums.alliedmods.net/showthread.php?t=93600)
 - Add the following (as an example) into your server.cfg
@@ -85,10 +85,11 @@ If you already have a way to unreserve your server and already have extra slots 
 
 #### Fixing Some issues
 
-If you have issues with a witch targeting the wrong player or a defib bringing back the wrong player, try these.
+If you have issues with a witch targeting the wrong player or a defib bringing back the wrong player, or if you're on Windows and Zoey is important to you, try these.
 
 - [8+ Player](https://forums.alliedmods.net/showthread.php?t=121945)
 - [Defibrillator](https://forums.alliedmods.net/showthread.php?t=118723)
+- [FakeZoey](https://forums.alliedmods.net/showthread.php?t=258189)
 
 You may not need these fixes at all if you keep your cooperative players less than or equal to 8 and everyone's model is unique.
 
@@ -169,6 +170,8 @@ Yuge thanks to [MRxSNIPES2](http://steamcommunity.com/id/MRxSNIPES2/) for tirele
 Thanks to **Kruffty** for trying out ABM on a Windows dedicated server and blowing shit up. You scare me but I still love you bro! Thanks to **Sheriff Huckleberry** for telling me you're too old for that Linux command line bullshit and that I should implement menus instead. Haha.
 
 Major thanks to irc.[gamesurge.net](https://gamesurge.net/) for hosting the #sourcemod channel and in particular the following users **psychonic, asherkin, fakuivan, kbck** and **Peace-Maker** for putting up with me when I was too tired to Google another example and for forgiving what may have even been at the time "a stupid question". I thank you guys for being patient with me and helping me out :)
+
+Thank you **cravenge** for plenty of insight, tips and criticisms on the [AlliedModders forums](https://forums.alliedmods.net). I've yet to get around to all of your suggestions but I'm working on them. Thank you for that unrecoverable time you spend in helping us all out :)
 
 When I needed inspiration or insight on how to use any SourcePawn API feature my goto resources were in the following works.
 

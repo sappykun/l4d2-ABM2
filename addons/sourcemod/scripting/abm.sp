@@ -26,7 +26,7 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.11"
+#define PLUGIN_VERSION "0.1.12"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 int g_OS;  // no one wants to do OS specific stuff but a bug on Windows crashes the server
@@ -69,6 +69,7 @@ int g_onteam = 1;       // g_QDB client's team
 char g_model[64];       // g_QDB client's model
 bool g_queued = false;  // g_QDB client's takeover state
 float g_origin[3];      // g_QDB client's origin vector
+bool g_automd = false;
 
 ConVar g_cvLogLevel;
 ConVar g_cvMinPlayers;
@@ -377,6 +378,7 @@ bool GetQRecord(int client) {
 			g_QRecord.GetValue("previd", g_lastid);
 			g_QRecord.GetValue("onteam", g_onteam);
 			g_QRecord.GetValue("queued", g_queued);
+			g_QRecord.GetValue("automd", g_automd);
 
 			if (GetClientTeam(client) == 2) {
 				int i = GetClientModelIndex(client);
@@ -406,6 +408,7 @@ bool NewQRecord(int client) {
 	g_QRecord.SetValue("previd", client, true);
 	g_QRecord.SetValue("onteam", GetClientTeam(client), true);
 	g_QRecord.SetValue("queued", false, true);
+	g_QRecord.SetValue("automd", false, true);
 	g_QRecord.SetString("model", "", true);
 	return true;
 }
@@ -758,8 +761,6 @@ public Action SwitchToBotTimer(Handle timer, Handle pack) {
 NewBotTakeOver(int client, int onteam) {
 	DebugToFile(1, "NewBotTakeOver: %d %d", client, onteam);
 
-	int nextBot;
-
 	if (GetQRecord(client)) {
 		StringMap R = g_QRecord;
 		ChangeClientTeam(client, 1);
@@ -771,6 +772,7 @@ NewBotTakeOver(int client, int onteam) {
 			}
 		}
 
+		int nextBot;
 		nextBot = GetNextBot(onteam);
 
 		if (nextBot >= 1) {
@@ -826,49 +828,46 @@ int CountTeamMates(int onteam, int mtype=2) {
 	return result;
 }
 
-int GetClientManager(int client) {
-	DebugToFile(3, "GetClientManager: %d", client);
+int GetClientManager(int target) {
+	DebugToFile(3, "GetClientManager: %d", target);
 
+	int result;
 	int userid;
-	int owner;
+	int client;
 
-	if (GetQRecord(client)) {
-		return client;
+	if (GetQRecord(target)) {
+		return target;
 	}
 
-	else if (IsClientValid(client)) {
+	else if (IsClientValid(target)) {
+		for (int i = 1 ; i <= MaxClients ; i++) {
+			if (IsClientValid(i) && IsFakeClient(i) && GetClientTeam(i) == 2) {
+
+				// let's really put a stop to the "idling 2 bots at once" problem
+				userid = GetEntData(target, FindSendPropInfo("SurvivorBot", "m_humanSpectatorUserID"));
+				client = GetClientOfUserId(userid);
+
+				if (GetQRecord(client) && i != g_target) {
+					SetEntProp(i, Prop_Send, "m_humanSpectatorUserID", 0);
+				}
+			}
+		}
+
 		for (int i = 1 ; i <= MaxClients ; i++) {
 			if (GetQRecord(i)) {
-				if (IsClientValid(g_target) && g_target == client) {
-					return i;
+				if (IsClientValid(g_target) && g_target == target) {
+					result = i;
+					break;
 				}
 			}
-		}
-
-		// sometimes a person may manage more than 1 bot, wtf?
-		userid = GetEntData(client, FindSendPropInfo("SurvivorBot", "m_humanSpectatorUserID"));
-		owner = GetClientOfUserId(userid);
-
-		// if a person is idling more than one bot, we attempt to fix that here.
-		if (GetQRecord(owner)) {
-			if (g_target != client && g_target != owner) {
-				if (IsClientValid(g_target) && IsFakeClient(g_target)) {
-					SetEntProp(client, Prop_Send, "m_humanSpectatorUserID", 0);
-					return 0;
-				}
-			}
-		}
-
-		if (owner != 0 && !IsFakeClient(owner)) {
-			return owner;
 		}
 	}
 
 	else {
-		return -1;  // this client is NOT valid
+		result = -1;  // this target is NOT valid
 	}
 
-	return 0;  // client IS valid and NOT managed
+	return result;  // target IS valid and NOT managed
 }
 
 int GetNextBot(int onteam, int skipIndex=1) {
@@ -1058,7 +1057,8 @@ public Action AutoModelTimer(Handle timer, any client) {
 		return Plugin_Handled;
 	}
 
-	else if (GetClientManager(client) > 0) {
+	int manager = GetClientManager(client);
+	if (GetQRecord(manager) && g_automd) {
 		return Plugin_Handled;
 	}
 
@@ -1081,21 +1081,21 @@ public Action AutoModelTimer(Handle timer, any client) {
 	count = smq[model];
 
 	if (count <= 1 || count <= CountTeamMates(2) / 8) {
-		return Plugin_Handled;
+		return Plugin_Handled;  // <-- doesn't make automd true, keep in mind
 	}
 
 	for (int i = 1 ; i <= (MaxClients / 8) + 1 ; i++) {
 		for (model = 0 ; model < 8 ; model++) {
-
-			if (g_OS == 1 && model == 5) {
-				continue;
-			}
-
 			if (smq[model] < i) {
 				i = MaxClients;
 				break;
 			}
 		}
+	}
+
+	if (GetQRecord(manager)) {
+		g_QRecord.SetValue("automd", true, true);
+		g_QRecord.SetString("model", g_SurvivorNames[model], true);
 	}
 
 	AssignModel(client, g_SurvivorNames[model]);
