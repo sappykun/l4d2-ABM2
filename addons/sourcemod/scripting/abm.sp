@@ -26,7 +26,7 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.10"
+#define PLUGIN_VERSION "0.1.11"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 int g_OS;  // no one wants to do OS specific stuff but a bug on Windows crashes the server
@@ -1054,7 +1054,11 @@ RmBots(int asmany, int onteam) {
 public Action AutoModelTimer(Handle timer, any client) {
 	DebugToFile(1, "AutoModelTimer: %d", client);
 
-	if (GetClientManager(client) > 0) {
+	if (!IsClientValid(client)) {
+		return Plugin_Handled;
+	}
+
+	else if (GetClientManager(client) > 0) {
 		return Plugin_Handled;
 	}
 
@@ -1145,18 +1149,16 @@ AssignModel(int client, char [] model) {
 int GetClientModelIndex(int client) {
 	DebugToFile(2, "GetClientModelIndex: %d", client);
 
-	if (GetClientTeam(client) != 2) {
-		return -1;
+	if (!IsClientValid(client)) {
+		return -2;
 	}
 
-	if (IsClientValid(client)) {
-		char modelName[64];
+	char modelName[64];
 
-		GetEntPropString(client, Prop_Data, "m_ModelName", modelName, sizeof(modelName));
-		for (int i = 0 ; i < sizeof(g_SurvivorPaths) ; i++) {
-			if (StrEqual(modelName, g_SurvivorPaths[i], false)) {
-				return i;
-			}
+	GetEntPropString(client, Prop_Data, "m_ModelName", modelName, sizeof(modelName));
+	for (int i = 0 ; i < sizeof(g_SurvivorPaths) ; i++) {
+		if (StrEqual(modelName, g_SurvivorPaths[i], false)) {
+			return i;
 		}
 	}
 
@@ -1549,16 +1551,18 @@ public SwitchToBotHandler(int client, int level) {
 
 		case 2: {
 			if (CanClientTarget(client, menuArg0)) {
-				if (homeTeam != 3 && GetClientTeam(menuArg1) == 3) {
-					if (!IsAdmin(client)) {
-						GenericMenuCleaner(client);
-						return;
-					}
-				}
+                if (IsClientValid(menuArg1)) {
+                    if (homeTeam != 3 && GetClientTeam(menuArg1) == 3) {
+                        if (!IsAdmin(client)) {
+                            GenericMenuCleaner(client);
+                            return;
+                        }
+                    }
 
-				if (GetClientManager(menuArg1) == 0) {
-					SwitchToBot(menuArg0, menuArg1, false);
-				}
+                    if (GetClientManager(menuArg1) == 0) {
+                        SwitchToBot(menuArg0, menuArg1, false);
+                    }
+                }
 			}
 
 			GenericMenuCleaner(client);
