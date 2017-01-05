@@ -26,7 +26,7 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.13"
+#define PLUGIN_VERSION "0.1.14"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 int g_OS;  // no one wants to do OS specific stuff but a bug on Windows crashes the server
@@ -827,7 +827,7 @@ NewBotTakeOver(int client, int onteam) {
 
 public Action NewBotTakeOverTimer(Handle timer, any client) {
 	DebugToFile(1, "NewBotTakeOverTimer: %d", client);
-	
+
 	if (GetQRecord(client)) {
 		NewBotTakeOver(client, g_onteam);
 	}
