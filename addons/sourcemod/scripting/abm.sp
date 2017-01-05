@@ -26,7 +26,7 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.12"
+#define PLUGIN_VERSION "0.1.13"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 int g_OS;  // no one wants to do OS specific stuff but a bug on Windows crashes the server
@@ -59,17 +59,18 @@ char g_SurvivorPaths[8][] = {
 	"models/survivors/survivor_manager.mdl",
 };
 
-char g_dB[512];         // generic debug string buffer
-char g_sB[512];         // generic catch all string buffer
-char g_pN[128];         // a dedicated buffer to storing a players name
-int g_client = 0;       // g_QDB client id
-int g_target = 0;       // g_QDB player (human or bot) id
-int g_lastid = 0;       // g_QDB client's last known bot id
-int g_onteam = 1;       // g_QDB client's team
-char g_model[64];       // g_QDB client's model
-bool g_queued = false;  // g_QDB client's takeover state
-float g_origin[3];      // g_QDB client's origin vector
-bool g_automd = false;
+char g_dB[512];                     // generic debug string buffer
+char g_sB[512];                     // generic catch all string buffer
+char g_pN[128];                     // a dedicated buffer to storing a players name
+int g_client;                       // g_QDB client id
+int g_target;                       // g_QDB player (human or bot) id
+int g_lastid;                       // g_QDB client's last known bot id
+int g_onteam = 1;                   // g_QDB client's team
+char g_model[64];                   // g_QDB client's model
+char g_ghost[64];                   // g_QDB client model backup (for activation)
+bool g_queued = false;              // g_QDB client's takeover state
+float g_origin[3];                  // g_QDB client's origin vector
+char g_cisi[MAXPLAYERS + 1][64];    // g_QDB client Id to steam Id array
 
 ConVar g_cvLogLevel;
 ConVar g_cvMinPlayers;
@@ -83,7 +84,6 @@ ConVar g_cvZoey;
 bool g_IsVs = false;
 char g_GameMode[16];
 int g_LogLevel;
-int g_WasPlayers;
 int g_MinPlayers;
 char g_PrimaryWeapon[64];
 char g_SecondaryWeapon[64];
@@ -110,6 +110,9 @@ public OnPluginStart() {
 	HookEvent("player_team", QTeamHook);
 	HookEvent("player_bot_replace", QAfkHook);
 	HookEvent("bot_player_replace", QBakHook);
+
+	HookEvent("round_freeze_end", RoundFreezeEndHook);
+	HookEvent("player_activate", PlayerActivateHook);
 
 	RegAdminCmd("abm", MainMenuCmd, ADMFLAG_GENERIC);
 	RegAdminCmd("abm-menu", MainMenuCmd, ADMFLAG_GENERIC);
@@ -138,7 +141,9 @@ public OnPluginStart() {
 	// Register everyone that we can find
 	for (int i = 1 ; i <= MaxClients ; i++) {
 		if (!GetQRecord(i)) {
-			SetQRecord(i);
+			if (SetQRecord(i) != -1) {
+				g_cisi[i] = g_QKey;
+			}
 		}
 	}
 
@@ -146,7 +151,7 @@ public OnPluginStart() {
 	g_IsVs = (StrEqual(g_GameMode, "versus") || StrEqual(g_GameMode, "scavenge"));
 
 	CreateConVar("abm_version", PLUGIN_VERSION, "ABM plugin version", FCVAR_DONTRECORD);
-	g_cvMinPlayers = CreateConVar("abm_minplayers", "4", "Survivors will never be less than this value");
+	g_cvMinPlayers = CreateConVar("abm_minplayers", "4", "Pruning extra survivors stops at this size");
 	g_cvPrimaryWeapon = CreateConVar("abm_primaryweapon", "shotgun_chrome", "5+ survivor primary weapon");
 	g_cvSecondaryWeapon = CreateConVar("abm_secondaryweapon", "baseball_bat", "5+ survivor secondary weapon");
 	g_cvThrowable = CreateConVar("abm_throwable", "", "5+ survivor throwable item");
@@ -171,26 +176,48 @@ public OnPluginStart() {
 	HookConVarChange(g_cvConsumable, UpdateConVarsHook);
 	HookConVarChange(g_cvZoey, UpdateConVarsHook);
 	UpdateConVarsHook(g_cvLogLevel, "0", "0");
-	UpdateConVarsHook(g_cvMinPlayers, "4", "4");
+	UpdateMinPlayersHook(g_cvMinPlayers, "4", "4");
 	UpdateConVarsHook(g_cvZoey, g_sB, g_sB);
 	AutoExecConfig(true, "abm");
+}
+
+public RoundFreezeEndHook(Handle event, const char[] name, bool dontBroadcast) {
+	DebugToFile(1, "RoundFreezeEndHook: %s", name);
+
+	StringMapSnapshot keys = g_QDB.Snapshot();
+
+	for (int i ; i < keys.Length ; i++) {
+		keys.GetKey(i, g_sB, sizeof(g_sB));
+		g_QDB.GetValue(g_sB, g_QRecord);
+		g_QRecord.GetString("model", g_sB, sizeof(g_sB));
+		g_QRecord.SetString("ghost", g_sB, true);
+	}
+
+	CloseHandle(keys);
+}
+
+public PlayerActivateHook(Handle event, const char[] name, bool dontBroadcast) {
+	DebugToFile(1, "PlayerActivateHook: %s", name);
+
+	int userid = GetEventInt(event, "userid");
+	int client = GetClientOfUserId(userid);
+
+	if (GetQRecord(client)) {
+		AssignModel(client, g_ghost);
+	}
 }
 
 public UpdateMinPlayersHook(Handle convar, const char[] oldCv, const char[] newCv) {
 	DebugToFile(1, "UpdateMinPlayersHook: %s %s", oldCv, newCv);
 
 	g_MinPlayers = GetConVarInt(g_cvMinPlayers);
-	g_WasPlayers = g_MinPlayers;
-	CreateTimer(0.2, RmBotsTimer, g_MinPlayers * -1);
+	CreateTimer(0.1, RmBotsTimer, g_MinPlayers * -1);
 }
 
 public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) {
 	DebugToFile(1, "UpdateConVarsHook: %s %s", oldCv, newCv);
 
 	g_LogLevel = GetConVarInt(g_cvLogLevel);
-	g_MinPlayers = GetConVarInt(g_cvMinPlayers);
-	g_WasPlayers = g_MinPlayers;
-
 	GetConVarString(g_cvPrimaryWeapon, g_PrimaryWeapon, sizeof(g_PrimaryWeapon));
 	GetConVarString(g_cvSecondaryWeapon, g_SecondaryWeapon, sizeof(g_SecondaryWeapon));
 	GetConVarString(g_cvThrowable, g_Throwable, sizeof(g_Throwable));
@@ -213,6 +240,7 @@ public OnClientPostAdminCheck(int client) {
 
 	if (!GetQRecord(client)) {
 		if (SetQRecord(client) >= 0) {
+			g_cisi[client] = g_QKey;
 			PrintToServer("AUTH ID: %s, ADDED TO QDB.", g_QKey);
 
 			int onteam = 2;
@@ -221,10 +249,7 @@ public OnClientPostAdminCheck(int client) {
 			}
 
 			if (!g_IsVs && CountTeamMates(onteam) >= 1) {
-				if (CountTeamMates(onteam, 0) == 0) {
-					NewBotTakeOver(client, onteam);
-					g_MinPlayers++;
-				}
+				NewBotTakeOver(client, onteam);
 			}
 		}
 	}
@@ -232,7 +257,8 @@ public OnClientPostAdminCheck(int client) {
 
 public GoIdleHook(Handle event, const char[] name, bool dontBroadcast) {
 	DebugToFile(1, "GoIdleHook: %s", name);
-	int client = GetClientOfUserId(GetEventInt(event, "player"));
+	int player = GetEventInt(event, "player");
+	int client = GetClientOfUserId(player);
 	GoIdle(client);
 }
 
@@ -240,24 +266,43 @@ GoIdle(int client) {
 	DebugToFile(1, "GoIdle: %d", client);
 
 	if (GetQRecord(client)) {
-		ChangeClientTeam(client, 1);
-		SetHumanSpecSig(g_target, client);
-		SetEntProp(client, Prop_Send, "m_iObserverMode", 4);
+		if (GetClientTeam(client) == 2) {
+			ChangeClientTeam(client, 1);
+			SetHumanSpecSig(g_target, client);
+			AssignModel(g_target, g_model);
+		}
 	}
 }
 
 public CleanQDBHook(Handle event, const char[] name, bool dontBroadcast) {
 	DebugToFile(1, "CleanQDBHook: %s", name);
-	int client = GetClientOfUserId(GetEventInt(event, "userid"));
 
-	if (GetQRecord(client)) {
-		if (g_QDB.Remove(g_QKey)) {
-			PrintToServer("AUTH ID: %s, REMOVED FROM QDB.", g_QKey);
+	int userid = GetEventInt(event, "userid");
+	int client = GetClientOfUserId(userid);
 
-			if (g_WasPlayers < g_MinPlayers) {
-				g_MinPlayers--;
-				CreateTimer(0.2, RmBotsTimer, 1);
-			}
+	// during map change, GetQRecord doesn't work :'(
+	Format(g_sB, sizeof(g_sB), "%s", g_cisi[client]);
+
+	if (g_sB[0] != EOS) {
+		g_cisi[client] = "";
+
+		if (g_QDB.GetValue(g_sB, g_QRecord)) {
+			RemoveQDBKey(g_sB);
+		}
+	}
+}
+
+RemoveQDBKey(char[] key) {
+	DebugToFile(1, "RemoveQDBKey: %s", key);
+
+	bool rmbot = g_QDB.Size > g_MinPlayers;
+	int asmany = CountTeamMates(2) - 1 * -1;
+
+	if (g_QDB.Remove(key)) {
+		PrintToServer("AUTH ID: %s, REMOVED FROM QDB.", key);
+
+		if (rmbot) {
+			CreateTimer(1.0, RmBotsTimer, asmany);
 		}
 	}
 }
@@ -320,7 +365,7 @@ bool CanClientTarget(int client, int target) {
 }
 
 int GetPlayClient(int client) {
-	DebugToFile(1, "GetPlayClient: %d", client);
+	DebugToFile(2, "GetPlayClient: %d", client);
 
 	if (GetQRecord(client)) {
 		return g_target;
@@ -378,7 +423,6 @@ bool GetQRecord(int client) {
 			g_QRecord.GetValue("previd", g_lastid);
 			g_QRecord.GetValue("onteam", g_onteam);
 			g_QRecord.GetValue("queued", g_queued);
-			g_QRecord.GetValue("automd", g_automd);
 
 			if (GetClientTeam(client) == 2) {
 				int i = GetClientModelIndex(client);
@@ -389,6 +433,7 @@ bool GetQRecord(int client) {
 			}
 
 			g_QRecord.GetString("model", g_model, sizeof(g_model));
+			g_QRecord.GetString("ghost", g_ghost, sizeof(g_ghost));
 			return true;
 		}
 	}
@@ -408,8 +453,8 @@ bool NewQRecord(int client) {
 	g_QRecord.SetValue("previd", client, true);
 	g_QRecord.SetValue("onteam", GetClientTeam(client), true);
 	g_QRecord.SetValue("queued", false, true);
-	g_QRecord.SetValue("automd", false, true);
 	g_QRecord.SetString("model", "", true);
+	g_QRecord.SetString("ghost", "", true);
 	return true;
 }
 
@@ -447,23 +492,8 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 		return;
 	}
 
-	// assign a model
-	int onteam = GetClientTeam(client);
-	if (onteam == 2 && CountTeamMates(onteam) > 4) {
+	if (GetClientTeam(client) == 2) {
 		CreateTimer(0.1, AutoModelTimer, client);
-	}
-
-	// assign a client
-	for (int i = 1 ; i <= MaxClients ; i++) {
-		if (GetQRecord(i)) {
-			g_QRecord.GetValue("queued", g_queued);
-
-			if (g_queued == true && g_onteam == onteam) {
-				g_QRecord.SetValue("queued", false, true);
-				SwitchToBot(i, client);
-				break;
-			}
-		}
 	}
 }
 
@@ -790,8 +820,19 @@ NewBotTakeOver(int client, int onteam) {
 				State_TransitionSig(client, 8);
 			}
 		}
+
+		CreateTimer(1.0, NewBotTakeOverTimer, client);
 	}
 }
+
+public Action NewBotTakeOverTimer(Handle timer, any client) {
+	DebugToFile(1, "NewBotTakeOverTimer: %d", client);
+	
+	if (GetQRecord(client)) {
+		NewBotTakeOver(client, g_onteam);
+	}
+}
+
 
 int CountTeamMates(int onteam, int mtype=2) {
 	DebugToFile(1, "CountTeamMates: %d %d", onteam, mtype);
@@ -844,7 +885,7 @@ int GetClientManager(int target) {
 			if (IsClientValid(i) && IsFakeClient(i) && GetClientTeam(i) == 2) {
 
 				// let's really put a stop to the "idling 2 bots at once" problem
-				userid = GetEntData(target, FindSendPropInfo("SurvivorBot", "m_humanSpectatorUserID"));
+				userid = GetEntData(i, FindSendPropInfo("SurvivorBot", "m_humanSpectatorUserID"));
 				client = GetClientOfUserId(userid);
 
 				if (GetQRecord(client) && i != g_target) {
@@ -1057,8 +1098,8 @@ public Action AutoModelTimer(Handle timer, any client) {
 		return Plugin_Handled;
 	}
 
-	int manager = GetClientManager(client);
-	if (GetQRecord(manager) && g_automd) {
+	int target = GetClientManager(client);
+	if (GetQRecord(target) && g_model[0] != EOS) {
 		return Plugin_Handled;
 	}
 
@@ -1081,7 +1122,7 @@ public Action AutoModelTimer(Handle timer, any client) {
 	count = smq[model];
 
 	if (count <= 1 || count <= CountTeamMates(2) / 8) {
-		return Plugin_Handled;  // <-- doesn't make automd true, keep in mind
+		return Plugin_Handled;
 	}
 
 	for (int i = 1 ; i <= (MaxClients / 8) + 1 ; i++) {
@@ -1091,11 +1132,6 @@ public Action AutoModelTimer(Handle timer, any client) {
 				break;
 			}
 		}
-	}
-
-	if (GetQRecord(manager)) {
-		g_QRecord.SetValue("automd", true, true);
-		g_QRecord.SetString("model", g_SurvivorNames[model], true);
 	}
 
 	AssignModel(client, g_SurvivorNames[model]);
@@ -1197,7 +1233,6 @@ int GetOS() {
 	CloseHandle(hGameConf);
 	return result;  // 0: Linux 1: Windows
 }
-
 
 void RoundRespawnSig(int client) {
 	DebugToFile(1, "RoundRespawnSig: %d", client);

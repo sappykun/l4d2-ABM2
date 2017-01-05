@@ -1,4 +1,26 @@
 # ABM Change Log
+## [0.1.13] - 2017-05-01
+### Added
+- StringMap g_ghost key added (on activation, this model is used)
+- g_cisi (client id to steam id) array added (g_cisi[client] = STEAMID)
+- RoundFreezeEndHook helps to store user's models in memory for the next map
+- PlayerActivateHook helps to restore a user's model from the last map
+- OnPluginStart will now try to add client id's to g_cisi
+- RemoveQDBKey helps to remove a STEAMID from g_QDB (parted from CleanQDBHook)
+- NewBotTakeOverTimer is a recursive attempt at assigning a bot to a new player
+- New (maybe better) signatures added to abm.txt for Windows servers (thanks cravenge)
+
+### Changed
+- GoIdle adds a check to make sure the person idling is a survivor
+- OnSpawnHook is greatly simplified and models survivors at the most now
+
+### Removed
+- g_WasPlayers is gone (a whole new approach to abm_minplayers implemented)
+- g_automd has been replaced with g_ghost (see PlayerActivateHook)
+
+### Fixed
+- An idle regression where idlers fought to idle
+- Models are now better remembered across maps (not campaigns)
 
 ## [0.1.12] - 2017-01-01
 ### Fixed
