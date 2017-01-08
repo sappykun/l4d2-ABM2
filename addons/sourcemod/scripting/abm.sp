@@ -26,7 +26,7 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.14"
+#define PLUGIN_VERSION "0.1.15"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 int g_OS;  // no one wants to do OS specific stuff but a bug on Windows crashes the server
@@ -70,6 +70,7 @@ char g_model[64];                   // g_QDB client's model
 char g_ghost[64];                   // g_QDB client model backup (for activation)
 bool g_queued = false;              // g_QDB client's takeover state
 float g_origin[3];                  // g_QDB client's origin vector
+bool g_inspec = false;              // g_QDB check client's specator mode
 char g_cisi[MAXPLAYERS + 1][64];    // g_QDB client Id to steam Id array
 
 ConVar g_cvLogLevel;
@@ -201,9 +202,18 @@ public PlayerActivateHook(Handle event, const char[] name, bool dontBroadcast) {
 
 	int userid = GetEventInt(event, "userid");
 	int client = GetClientOfUserId(userid);
+	PlayerActivate(client);
+}
+
+PlayerActivate(int client) {
+	DebugToFile(1, "PlayerActivate: %d", client);
 
 	if (GetQRecord(client)) {
 		AssignModel(client, g_ghost);
+
+		if (g_onteam >= 2 && !g_inspec) {
+			CreateTimer(2.0, TakeOverTimer, client);
+		}
 	}
 }
 
@@ -248,8 +258,8 @@ public OnClientPostAdminCheck(int client) {
 				onteam = 3;
 			}
 
-			if (!g_IsVs && CountTeamMates(onteam) >= 1) {
-				NewBotTakeOver(client, onteam);
+			if (CountTeamMates(onteam) >= 1) {
+				TakeOver(client, onteam);
 			}
 		}
 	}
@@ -279,30 +289,20 @@ public CleanQDBHook(Handle event, const char[] name, bool dontBroadcast) {
 
 	int userid = GetEventInt(event, "userid");
 	int client = GetClientOfUserId(userid);
-
-	// during map change, GetQRecord doesn't work :'(
-	Format(g_sB, sizeof(g_sB), "%s", g_cisi[client]);
-
-	if (g_sB[0] != EOS) {
-		g_cisi[client] = "";
-
-		if (g_QDB.GetValue(g_sB, g_QRecord)) {
-			RemoveQDBKey(g_sB);
-		}
-	}
+	RemoveQDBKey(client);
 }
 
-RemoveQDBKey(char[] key) {
-	DebugToFile(1, "RemoveQDBKey: %s", key);
+RemoveQDBKey(int client) {
+	DebugToFile(1, "RemoveQDBKey: %d", client);
 
-	bool rmbot = g_QDB.Size > g_MinPlayers;
-	int asmany = CountTeamMates(2) - 1 * -1;
+	// during map change, GetQRecord is not reliable :'(
+	Format(g_sB, sizeof(g_sB), "%s", g_cisi[client]);
 
-	if (g_QDB.Remove(key)) {
-		PrintToServer("AUTH ID: %s, REMOVED FROM QDB.", key);
-
-		if (rmbot) {
-			CreateTimer(1.0, RmBotsTimer, asmany);
+	if (g_QDB.Remove(g_sB)) {
+		g_cisi[client] = "";
+		PrintToServer("AUTH ID: %s, REMOVED FROM QDB.", g_sB);
+		if (CountTeamMates(2) > g_MinPlayers) {
+			CreateTimer(1.0, RmBotsTimer, 1);
 		}
 	}
 }
@@ -420,9 +420,10 @@ bool GetQRecord(int client) {
 
 			g_QRecord.GetValue("client", g_client);
 			g_QRecord.GetValue("target", g_target);
-			g_QRecord.GetValue("previd", g_lastid);
+			g_QRecord.GetValue("lastid", g_lastid);
 			g_QRecord.GetValue("onteam", g_onteam);
 			g_QRecord.GetValue("queued", g_queued);
+			g_QRecord.GetValue("inspec", g_inspec);
 
 			if (GetClientTeam(client) == 2) {
 				int i = GetClientModelIndex(client);
@@ -450,9 +451,10 @@ bool NewQRecord(int client) {
 	g_QRecord.SetArray("origin", g_origin, sizeof(g_origin), true);
 	g_QRecord.SetValue("client", client, true);
 	g_QRecord.SetValue("target", client, true);
-	g_QRecord.SetValue("previd", client, true);
+	g_QRecord.SetValue("lastid", client, true);
 	g_QRecord.SetValue("onteam", GetClientTeam(client), true);
 	g_QRecord.SetValue("queued", false, true);
+	g_QRecord.SetValue("inspec", false, true);
 	g_QRecord.SetString("model", "", true);
 	g_QRecord.SetString("ghost", "", true);
 	return true;
@@ -514,6 +516,7 @@ public OnDeathHook(Handle event, const char[] name, bool dontBroadcast) {
 			g_QRecord.SetValue("queued", true, true);
 		}
 
+		GenericMenuCleaner(playClient);
 		menuArg0 = playClient;
 		SwitchToBotHandler(playClient, 1);
 	}
@@ -527,12 +530,27 @@ public QTeamHook(Handle event, const char[] name, bool dontBroadcast) {
 
 	if (GetQRecord(client)) {
 		if (onteam >= 2) {
+			g_QRecord.SetValue("inspec", false, true);
 			g_QRecord.SetValue("target", client, true);
 			g_QRecord.SetValue("onteam", onteam, true);
 
 			if (onteam == 3) {
 				g_QRecord.SetString("model", "", true);
 			}
+		}
+
+		if (onteam <= 1) { // cycling requires 0.2 or higher?
+			CreateTimer(0.2, QTeamHookTimer, client);
+		}
+	}
+}
+
+public Action QTeamHookTimer(Handle timer, any client) {
+	DebugToFile(1, "QTeamHookTimer: %d", client);
+
+	if (GetQRecord(client) && !g_inspec) {
+		if (IsClientValid(g_target) && g_target != client) {
+			SetHumanSpecSig(g_target, client);
 		}
 	}
 }
@@ -572,7 +590,7 @@ public QBakHook(Handle event, const char[] name, bool dontBroadcast) {
 
 	if (GetQRecord(client)) {
 		if (g_target != target) {
-			g_QRecord.SetValue("previd", target);
+			g_QRecord.SetValue("lastid", target);
 			g_QRecord.SetValue("target", client);
 
 			GetClientName(target, g_pN, sizeof(g_pN));
@@ -625,7 +643,7 @@ RespawnClient(int client, int target=0) {
 
 	else if (GetQRecord(client)) {
 		if (g_onteam == 3) {
-			NewBotTakeOver(client, 3);
+			TakeOver(client, 3);
 			return;
 		}
 	}
@@ -788,8 +806,8 @@ public Action SwitchToBotTimer(Handle timer, Handle pack) {
 	return Plugin_Stop;
 }
 
-NewBotTakeOver(int client, int onteam) {
-	DebugToFile(1, "NewBotTakeOver: %d %d", client, onteam);
+TakeOver(int client, int onteam) {
+	DebugToFile(1, "TakeOver: %d %d", client, onteam);
 
 	if (GetQRecord(client)) {
 		StringMap R = g_QRecord;
@@ -821,15 +839,15 @@ NewBotTakeOver(int client, int onteam) {
 			}
 		}
 
-		CreateTimer(1.0, NewBotTakeOverTimer, client);
+		CreateTimer(2.0, TakeOverTimer, client);
 	}
 }
 
-public Action NewBotTakeOverTimer(Handle timer, any client) {
-	DebugToFile(1, "NewBotTakeOverTimer: %d", client);
+public Action TakeOverTimer(Handle timer, any client) {
+	DebugToFile(1, "TakeOverTimer: %d", client);
 
-	if (GetQRecord(client)) {
-		NewBotTakeOver(client, g_onteam);
+	if (GetQRecord(client) && GetClientTeam(client) <= 1) {
+		TakeOver(client, g_onteam);
 	}
 }
 
@@ -963,12 +981,18 @@ SwitchTeam(int client, int onteam) {
 
 	switch (onteam) {
 		case 0: GoIdle(client);
-		case 1: ChangeClientTeam(client, 0);
+		case 1: {
+			if (GetQRecord(client)) {
+				g_QRecord.SetValue("inspec", true, true);
+				ChangeClientTeam(client, 0);
+			}
+		}
+
 		default: {
 			int bot = GetNextBot(onteam);
 
 			if (!IsClientValid(bot)) {
-				NewBotTakeOver(client, onteam);
+				TakeOver(client, onteam);
 				return;
 			}
 
@@ -1794,7 +1818,13 @@ public StripClientHandler(int client, int level) {
 
 public Action ResetCmd(int client, args) {
 	DebugToFile(1, "ResetCmd: %d", client);
-	GenericMenuCleaner(client);
+
+	for (int i = 1 ; i <= MaxClients ; i++) {
+		GenericMenuCleaner(i);
+		if (GetQRecord(i)) {
+			CancelClientMenu(i, true, INVALID_HANDLE);
+		}
+	}
 }
 
 bool RegMenuHandler(int client, char [] handler, int level, int clearance=0) {
@@ -1858,8 +1888,11 @@ GenericMenuCleaner(int client, bool clearStack=true) {
 		g_menuItems[client][i] = 0;
 	}
 
-	if (clearStack == true && !g_callBacks.Empty) {
-		CloseHandle(g_callBacks);
+	if (clearStack == true) {
+		if (g_callBacks != INVALID_HANDLE) {
+			CloseHandle(g_callBacks);
+		}
+
 		g_callBacks = new ArrayStack(128);
 	}
 }
@@ -1868,7 +1901,7 @@ public GenericMenuHandler(Menu menu, MenuAction action, int param1, int param2) 
 	DebugToFile(1, "GenericMenuHandler: %d %d", param1, param2);
 
 	int client = param1;
-	int i = -1;
+	int i;  // -1;
 	char sB[128];
 
 	if (IsClientValid(param1)) {
@@ -1930,7 +1963,7 @@ public GenericMenuHandler(Menu menu, MenuAction action, int param1, int param2) 
 		}
 	}
 
-	if (g_callBacks.Empty) {
+	if (g_callBacks == INVALID_HANDLE || g_callBacks.Empty) {
 		GenericMenuCleaner(param1);
 		return;
 	}
@@ -2039,6 +2072,10 @@ TeamMatesMenu(int client, Menu menu,  char [] title, int mtype=2, int target=0, 
 		playClient = i;
 
 		if (GetQRecord(i)) {
+
+			if (mtype == 0) {
+				continue;
+			}
 
 			if (mtype == 1 || mtype == 2) {
 				mflag = true;
@@ -2154,9 +2191,10 @@ QDBCheckCmd(client) {
 			PrintToConsole(client, " - Status: %d", IsPlayerAlive(i));
 			PrintToConsole(client, " - Client: %d", g_client);
 			PrintToConsole(client, " - Target: %d", g_target);
-			PrintToConsole(client, " - PrevId: %d", g_lastid);
+			PrintToConsole(client, " - LastId: %d", g_lastid);
 			PrintToConsole(client, " - OnTeam: %d", g_onteam);
 			PrintToConsole(client, " - Queued: %d", g_queued);
+			PrintToConsole(client, " - InSpec: %d", g_inspec);
 
 			if (GetClientTeam(i) == 2) {
 				int j = GetClientModelIndex(i);

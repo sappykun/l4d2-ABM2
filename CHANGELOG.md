@@ -1,5 +1,29 @@
 # ABM Change Log
-## [0.1.13] - 2017-05-01
+
+## [0.1.15] - 2017-08-01
+### Added
+- g_inspec key helps to check if someone is explicitly in spectator mode
+- PlayerActivate parted from PlayerActivateHook (any new spectating bug fixes will probably start here)
+- InSpec and LastId added to abm-info
+
+### Fixed
+- duplicate characters should safely be able to idle without going into spectate
+- OnClientPostAdminCheck should now give all players a bot to play with on join
+
+### Changed
+- RemoveQDBKey required a char, it now requires an actual int client
+- g_previd is now g_lastid
+- On a players death, GenericMenuCleaner is now called before a takeover menu is shown
+- QTeamHook tries to fix a spectating bug on any player that didn't use !join 1 to join spectators
+- NewBotTakeOverTimer is now TakeOver (new was misleading as players wouldn't always get a new bot)
+- A check to see if a client isn't already on a team >= 2 added to TakeOverTimer
+- Switching to specator using !join 1 will set g_inspec to true
+- abm-reset now resets every clients menu (use with caution in case of emergency)
+- GenericMenuCleaner no longer checks if g_callBacks is empty
+- An extra check if g_callBacks == INVALID_HANDLE in GenericMenuHandler
+
+
+## [0.1.14] - 2017-05-01
 ### Added
 - StringMap g_ghost key added (on activation, this model is used)
 - g_cisi (client id to steam id) array added (g_cisi[client] = STEAMID)
