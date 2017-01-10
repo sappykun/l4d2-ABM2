@@ -26,7 +26,7 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.15"
+#define PLUGIN_VERSION "0.1.17"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 int g_OS;  // no one wants to do OS specific stuff but a bug on Windows crashes the server
@@ -46,7 +46,8 @@ char g_QKey[64];      // holds players by STEAM_ID
 StringMap g_QDB;      // holds player records linked by STEAM_ID
 StringMap g_QRecord;  // changes to an individual STEAM_ID mapping
 
-char g_SpecialNames[7][] = {"Tank", "Boomer", "Smoker", "Hunter", "Spitter", "Jockey", "Charger"};
+//char g_SpecialNames[8][] = {"Tank", "Boomer", "Smoker", "Witch", "Hunter", "Spitter", "Jockey", "Charger"};
+char g_SpecialNames[7][] = {"Boomer", "Smoker", "Witch", "Hunter", "Spitter", "Jockey", "Charger"};
 char g_SurvivorNames[8][] = {"Nick", "Rochelle", "Coach", "Ellis", "Bill", "Zoey", "Francis", "Louis"};
 char g_SurvivorPaths[8][] = {
 	"models/survivors/survivor_gambler.mdl",
@@ -72,6 +73,11 @@ bool g_queued = false;              // g_QDB client's takeover state
 float g_origin[3];                  // g_QDB client's origin vector
 bool g_inspec = false;              // g_QDB check client's specator mode
 char g_cisi[MAXPLAYERS + 1][64];    // g_QDB client Id to steam Id array
+Handle g_hTrackingTimer = INVALID_HANDLE; // that one timer that's always ticking
+
+char g_GameMode[16];
+bool g_IsVs = false;
+bool g_AssistedSpawning = false;
 
 ConVar g_cvLogLevel;
 ConVar g_cvMinPlayers;
@@ -82,8 +88,6 @@ ConVar g_cvHealItem;
 ConVar g_cvConsumable;
 ConVar g_cvZoey;
 
-bool g_IsVs = false;
-char g_GameMode[16];
 int g_LogLevel;
 int g_MinPlayers;
 char g_PrimaryWeapon[64];
@@ -180,11 +184,13 @@ public OnPluginStart() {
 	UpdateMinPlayersHook(g_cvMinPlayers, "4", "4");
 	UpdateConVarsHook(g_cvZoey, g_sB, g_sB);
 	AutoExecConfig(true, "abm");
+	StartTracking();
 }
 
 public RoundFreezeEndHook(Handle event, const char[] name, bool dontBroadcast) {
 	DebugToFile(1, "RoundFreezeEndHook: %s", name);
 
+	g_AssistedSpawning = false;
 	StringMapSnapshot keys = g_QDB.Snapshot();
 
 	for (int i ; i < keys.Length ; i++) {
@@ -192,6 +198,11 @@ public RoundFreezeEndHook(Handle event, const char[] name, bool dontBroadcast) {
 		g_QDB.GetValue(g_sB, g_QRecord);
 		g_QRecord.GetString("model", g_sB, sizeof(g_sB));
 		g_QRecord.SetString("ghost", g_sB, true);
+
+		if (g_onteam == 3) {
+			g_QRecord.SetValue("queued", true, true);
+			g_QRecord.SetValue("inspec", true, true);
+		}
 	}
 
 	CloseHandle(keys);
@@ -210,11 +221,78 @@ PlayerActivate(int client) {
 
 	if (GetQRecord(client)) {
 		AssignModel(client, g_ghost);
+		StartTracking();
+	}
+}
 
-		if (g_onteam >= 2 && !g_inspec) {
-			CreateTimer(2.0, TakeOverTimer, client);
+StartTracking() {
+	DebugToFile(1, "StartTracking");
+
+	if (g_hTrackingTimer == INVALID_HANDLE) {
+		g_hTrackingTimer = CreateTimer(
+			5.0, StartTrackingTimer, _, TIMER_REPEAT
+		);
+	}
+}
+
+public Action StartTrackingTimer(Handle timer) {
+	DebugToFile(3, "StartTrackingTimer");
+
+	if (g_AssistedSpawning) {
+		static interval;
+		int size = CountTeamMates(2);
+
+		if (interval >= 12) {
+			MkBots(size, 3);
+			interval = 0;
+		}
+
+		interval++;
+	}
+
+	int onteam;
+
+	for (int i = 1 ; i <= MaxClients ; i++) {
+		if (GetQRecord(i)) {
+			if (g_onteam == 3) {
+				if (!g_IsVs) {
+					g_AssistedSpawning = true;
+
+					if (GetClientTeam(i) <= 1) {
+						g_QRecord.SetValue("queued", true, true);
+					}
+				}
+
+				continue;
+			}
+
+			onteam = GetClientTeam(i);
+			if (onteam == 3) {
+				continue;
+			}
+
+			switch(onteam) {
+				case 1: {  // spectator
+					if (g_target != i) {
+						if (IsClientValid(g_target)) {
+							SetHumanSpecSig(g_target, i);
+							return Plugin_Continue;
+						}
+					}
+
+					CreateTimer(0.1, TakeOverTimer, i);
+				}
+
+				case 0: {  // idle
+					if (!g_inspec) {
+						CreateTimer(0.1, TakeOverTimer, i);
+					}
+				}
+			}
 		}
 	}
+
+	return Plugin_Continue;
 }
 
 public UpdateMinPlayersHook(Handle convar, const char[] oldCv, const char[] newCv) {
@@ -253,13 +331,8 @@ public OnClientPostAdminCheck(int client) {
 			g_cisi[client] = g_QKey;
 			PrintToServer("AUTH ID: %s, ADDED TO QDB.", g_QKey);
 
-			int onteam = 2;
-			if (g_IsVs && CountTeamMates(3) < CountTeamMates(2)) {
-				onteam = 3;
-			}
-
-			if (CountTeamMates(onteam) >= 1) {
-				TakeOver(client, onteam);
+			if (CountTeamMates(2) >= 1) {
+				CreateTimer(0.1, TakeOverTimer, client);
 			}
 		}
 	}
@@ -277,7 +350,7 @@ GoIdle(int client) {
 
 	if (GetQRecord(client)) {
 		if (GetClientTeam(client) == 2) {
-			ChangeClientTeam(client, 1);
+			SwitchToSpec(client);
 			SetHumanSpecSig(g_target, client);
 			AssignModel(g_target, g_model);
 		}
@@ -494,7 +567,18 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 		return;
 	}
 
-	if (GetClientTeam(client) == 2) {
+	int onteam = GetClientTeam(client);
+
+	if (!g_IsVs && onteam == 3) {
+		for (int i = 1 ; i <= MaxClients ; i++) {
+			if (GetQRecord(i) && g_queued && g_onteam == 3) {
+				g_QRecord.SetValue("queued", false, true);
+				SwitchToBot(i, client);
+			}
+		}
+	}
+
+	if (onteam == 2) {
 		CreateTimer(0.1, AutoModelTimer, client);
 	}
 }
@@ -514,6 +598,7 @@ public OnDeathHook(Handle event, const char[] name, bool dontBroadcast) {
 		if (g_onteam == 3) {
 			g_QRecord.SetValue("target", g_client, true);
 			g_QRecord.SetValue("queued", true, true);
+			SwitchToSpec(client);
 		}
 
 		GenericMenuCleaner(playClient);
@@ -525,7 +610,8 @@ public OnDeathHook(Handle event, const char[] name, bool dontBroadcast) {
 public QTeamHook(Handle event, const char[] name, bool dontBroadcast) {
 	DebugToFile(1, "QTeamHook: %s", name);
 
-	int client = GetClientOfUserId(GetEventInt(event, "userid"));
+	int userid = GetEventInt(event, "userid");
+	int client = GetClientOfUserId(userid);
 	int onteam = GetEventInt(event, "team");
 
 	if (GetQRecord(client)) {
@@ -572,7 +658,7 @@ public QAfkHook(Handle event, const char[] name, bool dontBroadcast) {
 		}
 	}
 
-	if (IsClientValid(client)) {
+	if (targetTeam == 2 && IsClientValid(client)) {
 		if (IsClientInKickQueue(client)) {
 			if (client && target && clientTeam == targetTeam) {
 				int safeClient = GetSafeClient(target);
@@ -718,6 +804,41 @@ bool AddSurvivor() {
 	return result;
 }
 
+GhostsModeProtector(int state) {
+	DebugToFile(1, "GhostsModeProtector: %d", state);
+	// CAREFUL: 0 starts this function and you must close it with 1 or
+	// risk breaking things. Close this with 1 immediately when done.
+
+	// e.g.,
+	// GhostsModeProtector(0);
+	// z_spawn_old tank auto;
+	// GhostsModeProtector(1);
+
+	static ghosts[MAXPLAYERS + 1];
+
+	switch (state) {
+		case 0: {
+			for (int i = 1 ; i <= MaxClients ; i++) {
+				if (GetQRecord(i) && g_onteam == 3) {
+					if (GetEntProp(i, Prop_Send, "m_isGhost") == 1) {
+						SetEntProp(i, Prop_Send, "m_isGhost", 0);
+						ghosts[i] = 1;
+					}
+				}
+			}
+		}
+
+		case 1: {
+			for (int i = 1 ; i <= MaxClients ; i++) {
+				if (ghosts[i] == 1) {
+					SetEntProp(i, Prop_Send, "m_isGhost", 1);
+					ghosts[i] = 0;
+				}
+			}
+		}
+	}
+}
+
 bool AddInfected() {
 	DebugToFile(1, "AddInfected");
 
@@ -732,12 +853,25 @@ bool AddInfected() {
 	if (IsClientValid(special)) {
 		ChangeClientTeam(special, 3);
 		Format(g_sB, sizeof(g_sB), "%s auto", si);
+
+		GhostsModeProtector(0);
 		QuickCheat(special, "z_spawn_old", g_sB);
 		KickClient(special);
+		GhostsModeProtector(1);
+
 		result = true;
 	}
 
 	return result;
+}
+
+SwitchToSpec(int client, int onteam=1) {
+	DebugToFile(1, "SwitchToSpectator: %d", client);
+
+	if (GetQRecord(client)) {
+		g_QRecord.SetValue("inspec", true, true);
+		ChangeClientTeam(client, onteam);
+	}
 }
 
 QuickCheat(int client, char [] cmd, char [] arg) {
@@ -756,7 +890,7 @@ SwitchToBot(int client, int bot, bool si_ghost=true) {
 		int onteam = GetClientTeam(bot);
 
 		if (GetQRecord(client)) {
-			ChangeClientTeam(client, 1);
+			SwitchToSpec(client);
 			SwitchToBotMiddleManWTF(client, bot, onteam, si_ghost);
 		}
 	}
@@ -811,7 +945,7 @@ TakeOver(int client, int onteam) {
 
 	if (GetQRecord(client)) {
 		StringMap R = g_QRecord;
-		ChangeClientTeam(client, 1);
+		SwitchToSpec(client);
 
 		if (IsClientValid(g_target)) {
 			if (client != g_target && GetClientTeam(g_target) == onteam) {
@@ -833,10 +967,7 @@ TakeOver(int client, int onteam) {
 
 		switch (onteam) {
 			case 2: AddSurvivor();
-			case 3: {
-				AddInfected();
-				State_TransitionSig(client, 8);
-			}
+			case 3: AddInfected();
 		}
 
 		CreateTimer(2.0, TakeOverTimer, client);
@@ -844,11 +975,42 @@ TakeOver(int client, int onteam) {
 }
 
 public Action TakeOverTimer(Handle timer, any client) {
-	DebugToFile(1, "TakeOverTimer: %d", client);
+	DebugToFile(3, "TakeOverTimer: %d", client);
 
-	if (GetQRecord(client) && GetClientTeam(client) <= 1) {
-		TakeOver(client, g_onteam);
+	if (CountTeamMates(2) <= 0) {
+		return Plugin_Handled;
 	}
+
+	static team2;
+	static team3;
+	static teamX;
+
+	if (GetQRecord(client)) {
+
+		if (GetClientTeam(client) >= 2) {
+			return Plugin_Handled;
+		}
+
+		teamX = 2;
+		if (g_onteam == 3) {
+			teamX = 3;
+		}
+
+		if (g_IsVs && g_onteam <= 1) {
+			team2 = CountTeamMates(2, 1);
+			team3 = CountTeamMates(3, 1);
+
+			if (team2 + team3 > 8) {
+				if (team3 < team2) {
+					teamX = 3;
+				}
+			}
+		}
+
+		TakeOver(client, teamX);
+	}
+
+	return Plugin_Handled;
 }
 
 
@@ -970,24 +1132,20 @@ CycleBots(int client, int onteam) {
 SwitchTeam(int client, int onteam) {
 	DebugToFile(1, "SwitchTeam: %d %d", client, onteam);
 
-	if (GetQRecord(client)) {
+	if (!GetQRecord(client)) {
+		return;
+	}
+
+	if (g_target != client) {
 		if (GetClientManager(g_target) == client) {
-			if (GetClientTeam(g_target) == onteam) {
-				SwitchToBot(client, g_target);
-				return;
-			}
+			SwitchToBot(client, g_target);
+			return;
 		}
 	}
 
 	switch (onteam) {
 		case 0: GoIdle(client);
-		case 1: {
-			if (GetQRecord(client)) {
-				g_QRecord.SetValue("inspec", true, true);
-				ChangeClientTeam(client, 0);
-			}
-		}
-
+		case 1: SwitchToSpec(client, 0);
 		default: {
 			int bot = GetNextBot(onteam);
 

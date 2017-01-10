@@ -1,5 +1,20 @@
 # ABM Change Log
 
+## [0.1.17] - 2017-10-01
+### Added
+- g_AssistedSpawning flips to true when a human goes SI in cooperative
+- g_hTrackingTimer assists with checking for unwanted spectators and SI assist
+- SwitchToSpec function added to assist with purposely going spectator
+- A person going to SI in any non-competitive mode spawns correctly
+
+### Changed
+- Tanks removed from spawning with abm-mk N 3 (replaced with Witches)
+- Logic (never tested) for team assignment moved to TakeOverTimer
+
+### Fixed
+- Massive performance boost regarding SI spawning
+
+
 ## [0.1.15] - 2017-08-01
 ### Added
 - g_inspec key helps to check if someone is explicitly in spectator mode
