@@ -1,5 +1,12 @@
 # ABM Change Log
 
+## [0.1.18] - 2017-11-01
+### Added
+- g_GameData is now the global LoadGameConfigFile handle
+
+### Fixed
+- Memory leak caused by ABM menus 
+
 ## [0.1.17] - 2017-10-01
 ### Added
 - g_AssistedSpawning flips to true when a human goes SI in cooperative
@@ -13,7 +20,6 @@
 
 ### Fixed
 - Massive performance boost regarding SI spawning
-
 
 ## [0.1.15] - 2017-08-01
 ### Added

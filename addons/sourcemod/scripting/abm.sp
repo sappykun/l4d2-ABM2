@@ -26,8 +26,10 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.17"
+#define PLUGIN_VERSION "0.1.18"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
+
+Handle g_GameData = null;
 
 int g_OS;  // no one wants to do OS specific stuff but a bug on Windows crashes the server
 
@@ -107,6 +109,11 @@ public Plugin myinfo= {
 
 public OnPluginStart() {
 	DebugToFile(1, "OnPluginStart");
+
+	g_GameData = LoadGameConfigFile("abm");
+	if (g_GameData == null) {
+		SetFailState("[ABM] Game data missing!");
+	}
 
 	HookEvent("player_first_spawn", OnSpawnHook);
 	HookEvent("player_death", OnDeathHook);
@@ -1409,11 +1416,7 @@ bool IsClientsModel(int client, char [] name) {
 
 int GetOS() {
 	DebugToFile(1, "GetOS");
-
-	Handle hGameConf = LoadGameConfigFile("abm");
-	int result = GameConfGetOffset(hGameConf, "OS");
-	CloseHandle(hGameConf);
-	return result;  // 0: Linux 1: Windows
+	return GameConfGetOffset(g_GameData, "OS");
 }
 
 void RoundRespawnSig(int client) {
@@ -1421,11 +1424,9 @@ void RoundRespawnSig(int client) {
 
 	static Handle hRoundRespawn = INVALID_HANDLE;
 	if (hRoundRespawn == INVALID_HANDLE) {
-		Handle hGameConf = LoadGameConfigFile("abm");
 		StartPrepSDKCall(SDKCall_Player);
-		PrepSDKCall_SetFromConf(hGameConf, SDKConf_Signature, "RoundRespawn");
+		PrepSDKCall_SetFromConf(g_GameData, SDKConf_Signature, "RoundRespawn");
 		hRoundRespawn = EndPrepSDKCall();
-		CloseHandle(hGameConf);
 	}
 
 	if (hRoundRespawn != INVALID_HANDLE) {
@@ -1433,8 +1434,7 @@ void RoundRespawnSig(int client) {
 	}
 
 	else {
-		PrintToChatAll("[ABM] RoundRespawnSig Signature broken.");
-		DebugToFile(0, "[ABM] RoundRespawnSig Signature broken.");
+		SetFailState("[ABM] RoundRespawnSig Signature broken.");
 	}
 }
 
@@ -1443,12 +1443,10 @@ void SetHumanSpecSig(int bot, int client) {
 
 	static Handle hSpec = INVALID_HANDLE;
 	if (hSpec == INVALID_HANDLE) {
-		Handle hGameConf = LoadGameConfigFile("abm");
 		StartPrepSDKCall(SDKCall_Player);
-		PrepSDKCall_SetFromConf(hGameConf, SDKConf_Signature, "SetHumanSpec");
+		PrepSDKCall_SetFromConf(g_GameData, SDKConf_Signature, "SetHumanSpec");
 		PrepSDKCall_AddParameter(SDKType_CBasePlayer, SDKPass_Pointer);
 		hSpec = EndPrepSDKCall();
-		CloseHandle(hGameConf);
 	}
 
 	if(hSpec != INVALID_HANDLE) {
@@ -1456,8 +1454,7 @@ void SetHumanSpecSig(int bot, int client) {
 	}
 
 	else {
-		PrintToChatAll("[ABM] SetHumanSpecSig Signature broken.");
-		DebugToFile(0, "[ABM] SetHumanSpecSig Signature broken.");
+		SetFailState("[ABM] SetHumanSpecSig Signature broken.");
 	}
 }
 
@@ -1466,22 +1463,18 @@ void State_TransitionSig(int client, int mode) {
 
 	static Handle hSpec = INVALID_HANDLE;
 	if (hSpec == INVALID_HANDLE) {
-		Handle hGameConf = LoadGameConfigFile("abm");
 		StartPrepSDKCall(SDKCall_Player);
-		PrepSDKCall_SetFromConf(hGameConf, SDKConf_Signature, "State_Transition");
+		PrepSDKCall_SetFromConf(g_GameData, SDKConf_Signature, "State_Transition");
 		PrepSDKCall_AddParameter(SDKType_PlainOldData , SDKPass_Plain);
 		hSpec = EndPrepSDKCall();
-		CloseHandle(hGameConf);
 	}
 
 	if(hSpec != INVALID_HANDLE) {
-		// mode 8 while infected causes the press e to move closer to take over;
-		SDKCall(hSpec, client, mode);
+		SDKCall(hSpec, client, mode);  // mode 8, press 8 to get closer
 	}
 
 	else {
-		PrintToChatAll("[ABM] State_TransitionSig Signature broken.");
-		DebugToFile(0, "[ABM] State_TransitionSig Signature broken.");
+		SetFailState("[ABM] State_TransitionSig Signature broken.");
 	}
 }
 
@@ -1490,12 +1483,10 @@ void TakeOverBotSig(int client) {
 
 	static Handle hSwitch = INVALID_HANDLE;
 	if (hSwitch == INVALID_HANDLE) {
-		Handle hGameConf = LoadGameConfigFile("abm");
 		StartPrepSDKCall(SDKCall_Player);
-		PrepSDKCall_SetFromConf(hGameConf, SDKConf_Signature, "TakeOverBot");
+		PrepSDKCall_SetFromConf(g_GameData, SDKConf_Signature, "TakeOverBot");
 		PrepSDKCall_AddParameter(SDKType_Bool, SDKPass_Plain);
 		hSwitch = EndPrepSDKCall();
-		CloseHandle(hGameConf);
 	}
 
 	if (hSwitch != INVALID_HANDLE) {
@@ -1503,9 +1494,7 @@ void TakeOverBotSig(int client) {
 	}
 
 	else {
-		PrintToChatAll("[ABM] TakeOverBotSig Signature broken.");
-		DebugToFile(0, "[ABM] TakeOverBotSig Signature broken.");
-
+		SetFailState("[ABM] TakeOverBotSig Signature broken.");
 	}
 
 }
@@ -1515,12 +1504,10 @@ void TakeOverZombieBotSig(int client, int bot) {
 
 	static Handle hSwitch = INVALID_HANDLE;
 	if (hSwitch == INVALID_HANDLE) {
-		Handle hGameConf = LoadGameConfigFile("abm");
 		StartPrepSDKCall(SDKCall_Player);
-		PrepSDKCall_SetFromConf(hGameConf, SDKConf_Signature, "TakeOverZombieBot");
+		PrepSDKCall_SetFromConf(g_GameData, SDKConf_Signature, "TakeOverZombieBot");
 		PrepSDKCall_AddParameter(SDKType_CBasePlayer, SDKPass_Pointer);
 		hSwitch = EndPrepSDKCall();
-		CloseHandle(hGameConf);
 	}
 
 	if (hSwitch != INVALID_HANDLE) {
@@ -1528,8 +1515,7 @@ void TakeOverZombieBotSig(int client, int bot) {
 	}
 
 	else {
-		PrintToChatAll("[ABM] TakeOverZombieBotSig Signature broken.");
-		DebugToFile(0, "[ABM] TakeOverZombieBotSig Signature broken.");
+		SetFailState("[ABM] TakeOverZombieBotSig Signature broken.");
 	}
 }
 
@@ -1567,17 +1553,16 @@ public Action TeleportClientCmd(int client, args) {
 public TeleportClientHandler(int client, int level) {
 	DebugToFile(1, "TeleportClientHandler: %d %d", client, level);
 
-	Menu menu = new Menu(GenericMenuHandler);
 	if (!RegMenuHandler(client, "TeleportClientHandler", level, 0)) {
 		return;
 	}
 
 	switch(level) {
-		case 0: TeamMatesMenu(client, menu, "Teleport Client", 2, 1);
+		case 0: TeamMatesMenu(client, "Teleport Client", 2, 1);
 		case 1: {
 			GetClientName(menuArg0, g_sB, sizeof(g_sB));
 			Format(g_sB, sizeof(g_sB), "%s: Teleporting", g_sB);
-			TeamMatesMenu(client, menu, g_sB, 2, 1);
+			TeamMatesMenu(client, g_sB, 2, 1);
 		}
 
 		case 2: {
@@ -1630,17 +1615,16 @@ public Action SwitchTeamCmd(int client, args) {
 public SwitchTeamHandler(int client, int level) {
 	DebugToFile(1, "SwitchTeamHandler: %d %d", client, level);
 
-	Menu menu = new Menu(GenericMenuHandler);
 	if (!RegMenuHandler(client, "SwitchTeamHandler", level, 0)) {
 		return;
 	}
 
 	switch(level) {
-		case 0: TeamMatesMenu(client, menu, "Switch Client's Team", 1);
+		case 0: TeamMatesMenu(client, "Switch Client's Team", 1);
 		case 1: {
 			GetClientName(menuArg0, g_sB, sizeof(g_sB));
 			Format(g_sB, sizeof(g_sB), "%s: Switching", g_sB);
-			TeamsMenu(client, menu, g_sB);
+			TeamsMenu(client, g_sB);
 		}
 
 		case 2: {
@@ -1689,17 +1673,16 @@ public Action AssignModelCmd(int client, args) {
 public AssignModelHandler(int client, int level) {
 	DebugToFile(1, "AssignModelHandler: %d %d", client, level);
 
-	Menu menu = new Menu(GenericMenuHandler);
 	if (!RegMenuHandler(client, "AssignModelHandler", level, 0)) {
 		return;
 	}
 
 	switch(level) {
-		case 0: TeamMatesMenu(client, menu, "Change Client's Model", 2, 0, false);
+		case 0: TeamMatesMenu(client, "Change Client's Model", 2, 0, false);
 		case 1: {
 			GetClientName(menuArg0, g_sB, sizeof(g_sB));
 			Format(g_sB, sizeof(g_sB), "%s: Modeling", g_sB);
-			ModelsMenu(client, menu, g_sB);
+			ModelsMenu(client, g_sB);
 		}
 
 		case 2: {
@@ -1753,17 +1736,16 @@ public SwitchToBotHandler(int client, int level) {
 	DebugToFile(1, "SwitchToBotHandler: %d %d", client, level);
 
 	int homeTeam = ClientHomeTeam(client);
-	Menu menu = new Menu(GenericMenuHandler);
 	if (!RegMenuHandler(client, "SwitchToBotHandler", level, 0)) {
 		return;
 	}
 
 	switch(level) {
-		case 0: TeamMatesMenu(client, menu, "Takeover Bot", 1);
+		case 0: TeamMatesMenu(client, "Takeover Bot", 1);
 		case 1: {
 			GetClientName(menuArg0, g_sB, sizeof(g_sB));
 			Format(g_sB, sizeof(g_sB), "%s: Takeover", g_sB);
-			TeamMatesMenu(client, menu, g_sB, 0, 0, true, false, homeTeam);
+			TeamMatesMenu(client, g_sB, 0, 0, true, false, homeTeam);
 		}
 
 		case 2: {
@@ -1818,17 +1800,16 @@ public Action RespawnClientCmd(int client, args) {
 public RespawnClientHandler(int client, int level) {
 	DebugToFile(1, "RespawnClientHandler: %d %d", client, level);
 
-	Menu menu = new Menu(GenericMenuHandler);
 	if (!RegMenuHandler(client, "RespawnClientHandler", level, 0)) {
 		return;
 	}
 
 	switch(level) {
-		case 0: TeamMatesMenu(client, menu, "Respawn Client");
+		case 0: TeamMatesMenu(client, "Respawn Client");
 		case 1: {
 			GetClientName(menuArg0, g_sB, sizeof(g_sB));
 			Format(g_sB, sizeof(g_sB), "%s: Respawning", g_sB);
-			TeamMatesMenu(client, menu, g_sB);
+			TeamMatesMenu(client, g_sB);
 		}
 
 		case 2: {
@@ -1880,17 +1861,16 @@ public Action CycleBotsCmd(int client, args) {
 public CycleBotsHandler(int client, int level) {
 	DebugToFile(1, "CycleBotsHandler: %d %d", client, level);
 
-	Menu menu = new Menu(GenericMenuHandler);
 	if (!RegMenuHandler(client, "CycleBotsHandler", level, 0)) {
 		return;
 	}
 
 	switch(level) {
-		case 0: TeamMatesMenu(client, menu, "Cycle Client", 1);
+		case 0: TeamMatesMenu(client, "Cycle Client", 1);
 		case 1: {
 			GetClientName(menuArg0, g_sB, sizeof(g_sB));
 			Format(g_sB, sizeof(g_sB), "%s: Cycling", g_sB);
-			TeamsMenu(client, menu, g_sB, false);
+			TeamsMenu(client, g_sB, false);
 		}
 
 		case 2: {
@@ -1947,17 +1927,16 @@ public Action StripClientCmd(int client, args) {
 public StripClientHandler(int client, int level) {
 	DebugToFile(1, "StripClientHandler: %d %d", client, level);
 
-	Menu menu = new Menu(GenericMenuHandler);
 	if (!RegMenuHandler(client, "StripClientHandler", level, 0)) {
 		return;
 	}
 
 	switch(level) {
-		case 0: TeamMatesMenu(client, menu, "Strip Client", 2, 1);
+		case 0: TeamMatesMenu(client, "Strip Client", 2, 1);
 		case 1: {
 			GetClientName(menuArg0, g_sB, sizeof(g_sB));
 			Format(g_sB, sizeof(g_sB), "%s: Stripping", g_sB);
-			InvSlotsMenu(client, menuArg0, menu, g_sB);
+			InvSlotsMenu(client, menuArg0, g_sB);
 		}
 
 		case 2: {
@@ -2008,7 +1987,6 @@ public Action MainMenuCmd(int client, args) {
 public MainMenuHandler(int client, int level) {
 	DebugToFile(1, "MainMenuHandler: %d %d", client, level);
 
-	Menu menu = new Menu(GenericMenuHandler);
 	if (!RegMenuHandler(client, "MainMenuHandler", level, 0)) {
 		return;
 	}
@@ -2020,7 +1998,7 @@ public MainMenuHandler(int client, int level) {
 	Format(title, sizeof(title), "ABM Menu %s", PLUGIN_VERSION);
 
 	switch(level) {
-		case 0: MainMenu(client, menu, title);
+		case 0: MainMenu(client, title);
 		case 1: {
 			switch(cmd) {
 				case 0: TeleportClientCmd(client, 0);
@@ -2139,9 +2117,10 @@ public GenericMenuHandler(Menu menu, MenuAction action, int param1, int param2) 
 // MENUS
 // ================================================================== //
 
-MainMenu(int client, Menu menu,  char [] title) {
+MainMenu(int client, char [] title) {
 	DebugToFile(1, "MainMenu: %d %s", client, title);
 
+	Menu menu = new Menu(GenericMenuHandler);
 	menu.SetTitle(title);
 	menu.AddItem("0", "Teleport Client");  // "Telespiznat");	// teleport
 	menu.AddItem("1", "Switch Client Team");  //"Swintootle");	// switch team
@@ -2155,11 +2134,12 @@ MainMenu(int client, Menu menu,  char [] title) {
 	menu.Display(client, 120);
 }
 
-InvSlotsMenu(int client, int target, Menu menu,  char [] title) {
+InvSlotsMenu(int client, int target, char [] title) {
 	DebugToFile(1, "InvSlotsMenu: %d %d %s", client, target, title);
 
 	int ent;
 	char weapon[64];
+	Menu menu = new Menu(GenericMenuHandler);
 	menu.SetTitle(title);
 
 	for (new i = 0 ; i < 5 ; i++) {
@@ -2177,9 +2157,10 @@ InvSlotsMenu(int client, int target, Menu menu,  char [] title) {
 	menu.Display(client, 120);
 }
 
-ModelsMenu(int client, Menu menu,  char [] title) {
+ModelsMenu(int client, char [] title) {
 	DebugToFile(1, "ModelsMenu: %d %s", client, title);
 
+	Menu menu = new Menu(GenericMenuHandler);
 	menu.SetTitle(title);
 
 	for (new i = 0 ; i < sizeof(g_SurvivorNames) ; i++) {
@@ -2192,9 +2173,10 @@ ModelsMenu(int client, Menu menu,  char [] title) {
 	menu.Display(client, 120);
 }
 
-TeamsMenu(int client, Menu menu,  char [] title, bool all=true) {
+TeamsMenu(int client, char [] title, bool all=true) {
 	DebugToFile(1, "TeamsMenu: %d %s", client, title);
 
+	Menu menu = new Menu(GenericMenuHandler);
 	menu.SetTitle(title);
 	if (all) {
 		menu.AddItem("0", "Idler");
@@ -2211,10 +2193,11 @@ TeamsMenu(int client, Menu menu,  char [] title, bool all=true) {
 	menu.Display(client, 120);
 }
 
-TeamMatesMenu(int client, Menu menu,  char [] title, int mtype=2, int target=0, bool incDead=true,
+TeamMatesMenu(int client, char [] title, int mtype=2, int target=0, bool incDead=true,
 			  bool repeat=false, int homeTeam=0) {
 	DebugToFile(1, "TeamMatesMenu: %d %s %d %d %d %d", client, title, mtype, target, incDead, repeat);
 
+	Menu menu = new Menu(GenericMenuHandler);
 	menu.SetTitle(title);
 	int isAdmin = IsAdmin(client);
 	char health[32];
