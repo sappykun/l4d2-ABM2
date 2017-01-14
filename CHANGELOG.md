@@ -1,11 +1,32 @@
 # ABM Change Log
 
+## [0.1.19] - 2017-14-01
+### Removed
+- Witches no longer spawn with abm-mk (they don't stop spawning though)
+
+### Added
+- An assistant director added to help with spawning SI in certain situations
+- g_ADFreeze bool insures all players are loaded before the AD truly kicks in
+- g_ADInterval int is a counter for how many times we've been through the AD
+- Several hooks will stop the AD automatically e.g., round_end, mission_lost
+- RoundStartHook atm calls StartAD
+- StopAD stops the AD timer
+- StartAD starts the AD timer (was StartTracking)
+
+### Changed
+- Humans on SI in campaign mode should now ghost immediately on round start
+- Some spectator code has been commented out in ADTimer (will probably be removed)
+- When SI die, they no longer get an automatic takeover menu (it's still there)
+- Cleaned up a bit (replaced INVALID_HANDLE/CloseHandle /w null and delete)
+- g_hTrackingTimer is now g_AD (AD stands for Assistant Director)
+- DebugToFile is now Echo
+
 ## [0.1.18] - 2017-11-01
 ### Added
 - g_GameData is now the global LoadGameConfigFile handle
 
 ### Fixed
-- Memory leak caused by ABM menus 
+- Memory leak caused by ABM menus
 
 ## [0.1.17] - 2017-10-01
 ### Added

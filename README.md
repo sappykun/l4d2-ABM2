@@ -171,7 +171,7 @@ Thanks to **Kruffty** for trying out ABM on a Windows dedicated server and blowi
 
 Major thanks to irc.[gamesurge.net](https://gamesurge.net/) for hosting the #sourcemod channel and in particular the following users **psychonic, asherkin, fakuivan, kbck** and **Peace-Maker** for putting up with me when I was too tired to Google another example and for forgiving what may have even been at the time "a stupid question". I thank you guys for being patient with me and helping me out :)
 
-Thank you **cravenge** for plenty of insight, tips and criticisms and to **TimoCop** on the [AlliedModders forums](https://forums.alliedmods.net). The GhostsModeProtector function (introduced in 0.1.17) would have most likely not have been possible without your help :)
+Thank you **cravenge** for plenty of insight, tips and criticisms and to **TimoCop** on the [AlliedModders forums](https://forums.alliedmods.net). The GhostsModeProtector function (introduced in 0.1.17) would have most likely not have been possible without your help. Thank you MasterMind420 for your thought provoking ideas and inspiring my determination :)
 
 When I needed inspiration or insight on how to use any SourcePawn API feature my goto resources were in the following works.
 

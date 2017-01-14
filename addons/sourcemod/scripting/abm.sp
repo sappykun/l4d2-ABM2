@@ -26,7 +26,7 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.18"
+#define PLUGIN_VERSION "0.1.19"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -49,7 +49,7 @@ StringMap g_QDB;      // holds player records linked by STEAM_ID
 StringMap g_QRecord;  // changes to an individual STEAM_ID mapping
 
 //char g_SpecialNames[8][] = {"Tank", "Boomer", "Smoker", "Witch", "Hunter", "Spitter", "Jockey", "Charger"};
-char g_SpecialNames[7][] = {"Boomer", "Smoker", "Witch", "Hunter", "Spitter", "Jockey", "Charger"};
+char g_SpecialNames[6][] = {"Boomer", "Smoker", "Hunter", "Spitter", "Jockey", "Charger"};
 char g_SurvivorNames[8][] = {"Nick", "Rochelle", "Coach", "Ellis", "Bill", "Zoey", "Francis", "Louis"};
 char g_SurvivorPaths[8][] = {
 	"models/survivors/survivor_gambler.mdl",
@@ -75,11 +75,13 @@ bool g_queued = false;              // g_QDB client's takeover state
 float g_origin[3];                  // g_QDB client's origin vector
 bool g_inspec = false;              // g_QDB check client's specator mode
 char g_cisi[MAXPLAYERS + 1][64];    // g_QDB client Id to steam Id array
-Handle g_hTrackingTimer = INVALID_HANDLE; // that one timer that's always ticking
+Handle g_AD;                        // Assistant Director Timer
 
 char g_GameMode[16];
 bool g_IsVs = false;
 bool g_AssistedSpawning = false;
+bool g_ADFreeze = true;
+int g_ADInterval;
 
 ConVar g_cvLogLevel;
 ConVar g_cvMinPlayers;
@@ -108,7 +110,7 @@ public Plugin myinfo= {
 }
 
 public OnPluginStart() {
-	DebugToFile(1, "OnPluginStart");
+	Echo(1, "OnPluginStart");
 
 	g_GameData = LoadGameConfigFile("abm");
 	if (g_GameData == null) {
@@ -116,15 +118,19 @@ public OnPluginStart() {
 	}
 
 	HookEvent("player_first_spawn", OnSpawnHook);
-	HookEvent("player_death", OnDeathHook);
+	HookEvent("player_death", OnDeathHook, EventHookMode_Pre);
 	HookEvent("player_disconnect", CleanQDBHook);
 	HookEvent("player_afk", GoIdleHook);
 	HookEvent("player_team", QTeamHook);
 	HookEvent("player_bot_replace", QAfkHook);
 	HookEvent("bot_player_replace", QBakHook);
 
-	HookEvent("round_freeze_end", RoundFreezeEndHook);
 	HookEvent("player_activate", PlayerActivateHook);
+	HookEvent("round_end", RoundFreezeEndHook, EventHookMode_Pre);
+	HookEvent("mission_lost", RoundFreezeEndHook, EventHookMode_Pre);
+	HookEvent("round_freeze_end", RoundFreezeEndHook, EventHookMode_Pre);
+	HookEvent("map_transition", RoundFreezeEndHook, EventHookMode_Pre);
+	HookEvent("round_start", RoundStartHook);
 
 	RegAdminCmd("abm", MainMenuCmd, ADMFLAG_GENERIC);
 	RegAdminCmd("abm-menu", MainMenuCmd, ADMFLAG_GENERIC);
@@ -191,32 +197,41 @@ public OnPluginStart() {
 	UpdateMinPlayersHook(g_cvMinPlayers, "4", "4");
 	UpdateConVarsHook(g_cvZoey, g_sB, g_sB);
 	AutoExecConfig(true, "abm");
-	StartTracking();
+	StartAD();
 }
 
 public RoundFreezeEndHook(Handle event, const char[] name, bool dontBroadcast) {
-	DebugToFile(1, "RoundFreezeEndHook: %s", name);
+	Echo(1, "RoundFreezeEndHook: %s", name);
 
-	g_AssistedSpawning = false;
+	if (g_ADFreeze) {
+		return;
+	}
+
+	StopAD();
 	StringMapSnapshot keys = g_QDB.Snapshot();
 
 	for (int i ; i < keys.Length ; i++) {
 		keys.GetKey(i, g_sB, sizeof(g_sB));
 		g_QDB.GetValue(g_sB, g_QRecord);
+		g_QRecord.GetValue("onteam", g_onteam);
 		g_QRecord.GetString("model", g_sB, sizeof(g_sB));
 		g_QRecord.SetString("ghost", g_sB, true);
 
 		if (g_onteam == 3) {
 			g_QRecord.SetValue("queued", true, true);
 			g_QRecord.SetValue("inspec", true, true);
+			g_QRecord.GetValue("client", g_client);
+
+			ForcePlayerSuicide(g_client);
+			SwitchToSpec(g_client);
 		}
 	}
 
-	CloseHandle(keys);
+	delete keys;
 }
 
 public PlayerActivateHook(Handle event, const char[] name, bool dontBroadcast) {
-	DebugToFile(1, "PlayerActivateHook: %s", name);
+	Echo(1, "PlayerActivateHook: %s", name);
 
 	int userid = GetEventInt(event, "userid");
 	int client = GetClientOfUserId(userid);
@@ -224,40 +239,83 @@ public PlayerActivateHook(Handle event, const char[] name, bool dontBroadcast) {
 }
 
 PlayerActivate(int client) {
-	DebugToFile(1, "PlayerActivate: %d", client);
+	Echo(1, "PlayerActivate: %d", client);
 
 	if (GetQRecord(client)) {
 		AssignModel(client, g_ghost);
-		StartTracking();
+
+		if (g_onteam == 3) {
+			TakeOver(client, 3);
+		}
 	}
 }
 
-StartTracking() {
-	DebugToFile(1, "StartTracking");
+public RoundStartHook(Handle event, const char[] name, bool dontBroadcast) {
+	Echo(1, "RoundStartHook: %s", name);
+	StartAD();
+}
 
-	if (g_hTrackingTimer == INVALID_HANDLE) {
-		g_hTrackingTimer = CreateTimer(
-			5.0, StartTrackingTimer, _, TIMER_REPEAT
+bool StopAD() {
+	Echo(1, "StopAD");
+
+	g_ADFreeze = true;
+	g_AssistedSpawning = false;
+	g_ADInterval = 0;
+
+	if (g_AD != null) {
+		delete g_AD;
+		g_AD = null;
+	}
+
+	return g_AD == null;
+}
+
+bool StartAD() {
+	Echo(1, "StartAD");
+
+	g_ADFreeze = true;
+	g_AssistedSpawning = false;
+	g_ADInterval = 0;
+
+	if (g_AD == null) {
+		g_AD = CreateTimer(
+			5.0, ADTimer, _, TIMER_REPEAT
 		);
 	}
+
+	return g_AD != null;
 }
 
-public Action StartTrackingTimer(Handle timer) {
-	DebugToFile(3, "StartTrackingTimer");
+public Action ADTimer(Handle timer) {
+	Echo(3, "ADTimer");
 
-	if (g_AssistedSpawning) {
-		static interval;
-		int size = CountTeamMates(2);
-
-		if (interval >= 12) {
-			MkBots(size, 3);
-			interval = 0;
+	if (g_ADFreeze) {
+		for (int i = 1 ; i <= MaxClients ; i++) {
+			if (IsClientConnected(i) && !IsClientInGame(i)) {
+				Echo(1, " -- ADTimer: Client %d isn't loaded in yet.", i);
+				return Plugin_Continue;
+			}
 		}
 
-		interval++;
+		Echo(1, " -- ADTimer: All clients are loaded in. Assisting.");
+		g_ADFreeze = false;
 	}
 
-	int onteam;
+	g_ADInterval++;
+
+	if (g_AssistedSpawning) {
+		if (g_ADInterval % 5 == 0) {
+			Echo(1, " -- Assisting SI: Matching Full Team");
+			MkBots(CountTeamMates(2) * -1, 3);
+		}
+
+		else if (g_ADInterval % 2 == 0) {
+			Echo(1, " -- Assisting SI: Matching Half Team");
+			MkBots((CountTeamMates(2) / 2) * -1, 3);
+		}
+	}
+
+// 	int onteam;
 
 	for (int i = 1 ; i <= MaxClients ; i++) {
 		if (GetQRecord(i)) {
@@ -273,29 +331,29 @@ public Action StartTrackingTimer(Handle timer) {
 				continue;
 			}
 
-			onteam = GetClientTeam(i);
-			if (onteam == 3) {
-				continue;
-			}
-
-			switch(onteam) {
-				case 1: {  // spectator
-					if (g_target != i) {
-						if (IsClientValid(g_target)) {
-							SetHumanSpecSig(g_target, i);
-							return Plugin_Continue;
-						}
-					}
-
-					CreateTimer(0.1, TakeOverTimer, i);
-				}
-
-				case 0: {  // idle
-					if (!g_inspec) {
-						CreateTimer(0.1, TakeOverTimer, i);
-					}
-				}
-			}
+// 			onteam = GetClientTeam(i);
+// 			if (onteam == 3) {
+// 				continue;
+// 			}
+//
+// 			switch(onteam) {
+// 				case 1: {  // spectator
+// 					if (g_target != i) {
+// 						if (IsClientValid(g_target)) {
+// 							SetHumanSpecSig(g_target, i);
+// 							return Plugin_Continue;
+// 						}
+// 					}
+//
+// 					CreateTimer(0.1, TakeOverTimer, i);
+// 				}
+//
+// 				case 0: {  // idle
+// 					if (!g_inspec) {
+// 						CreateTimer(0.1, TakeOverTimer, i);
+// 					}
+// 				}
+// 			}
 		}
 	}
 
@@ -303,14 +361,14 @@ public Action StartTrackingTimer(Handle timer) {
 }
 
 public UpdateMinPlayersHook(Handle convar, const char[] oldCv, const char[] newCv) {
-	DebugToFile(1, "UpdateMinPlayersHook: %s %s", oldCv, newCv);
+	Echo(1, "UpdateMinPlayersHook: %s %s", oldCv, newCv);
 
 	g_MinPlayers = GetConVarInt(g_cvMinPlayers);
 	CreateTimer(0.1, RmBotsTimer, g_MinPlayers * -1);
 }
 
 public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) {
-	DebugToFile(1, "UpdateConVarsHook: %s %s", oldCv, newCv);
+	Echo(1, "UpdateConVarsHook: %s %s", oldCv, newCv);
 
 	g_LogLevel = GetConVarInt(g_cvLogLevel);
 	GetConVarString(g_cvPrimaryWeapon, g_PrimaryWeapon, sizeof(g_PrimaryWeapon));
@@ -326,12 +384,12 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
 }
 
 public OnConfigsExecuted() {
-	DebugToFile(1, "OnConfigsExecuted");
+	Echo(1, "OnConfigsExecuted");
 	PrecacheModels();
 }
 
 public OnClientPostAdminCheck(int client) {
-	DebugToFile(1, "OnClientPostAdminCheck: %d", client);
+	Echo(1, "OnClientPostAdminCheck: %d", client);
 
 	if (!GetQRecord(client)) {
 		if (SetQRecord(client) >= 0) {
@@ -346,14 +404,14 @@ public OnClientPostAdminCheck(int client) {
 }
 
 public GoIdleHook(Handle event, const char[] name, bool dontBroadcast) {
-	DebugToFile(1, "GoIdleHook: %s", name);
+	Echo(1, "GoIdleHook: %s", name);
 	int player = GetEventInt(event, "player");
 	int client = GetClientOfUserId(player);
 	GoIdle(client);
 }
 
 GoIdle(int client) {
-	DebugToFile(1, "GoIdle: %d", client);
+	Echo(1, "GoIdle: %d", client);
 
 	if (GetQRecord(client)) {
 		if (GetClientTeam(client) == 2) {
@@ -365,7 +423,7 @@ GoIdle(int client) {
 }
 
 public CleanQDBHook(Handle event, const char[] name, bool dontBroadcast) {
-	DebugToFile(1, "CleanQDBHook: %s", name);
+	Echo(1, "CleanQDBHook: %s", name);
 
 	int userid = GetEventInt(event, "userid");
 	int client = GetClientOfUserId(userid);
@@ -373,7 +431,7 @@ public CleanQDBHook(Handle event, const char[] name, bool dontBroadcast) {
 }
 
 RemoveQDBKey(int client) {
-	DebugToFile(1, "RemoveQDBKey: %d", client);
+	Echo(1, "RemoveQDBKey: %d", client);
 
 	// during map change, GetQRecord is not reliable :'(
 	Format(g_sB, sizeof(g_sB), "%s", g_cisi[client]);
@@ -388,7 +446,7 @@ RemoveQDBKey(int client) {
 }
 
 public Action RmBotsTimer(Handle timer, any asmany) {
-	DebugToFile(3, "RmBotsTimer");
+	Echo(3, "RmBotsTimer");
 
 	if (!g_IsVs) {
 		RmBots(asmany, 2);
@@ -396,14 +454,14 @@ public Action RmBotsTimer(Handle timer, any asmany) {
 }
 
 bool IsAdmin(int client) {
-	DebugToFile(1, "IsAdmin: %d", client);
+	Echo(1, "IsAdmin: %d", client);
 	return CheckCommandAccess(
 		client, "generic_admin", ADMFLAG_GENERIC, false
 	);
 }
 
 bool IsClientValid(int client) {
-	DebugToFile(3, "IsClientValid: %d", client);
+	Echo(3, "IsClientValid: %d", client);
 
 	if (client >= 1 && client <= MaxClients) {
 		if (IsClientConnected(client)) {
@@ -417,7 +475,7 @@ bool IsClientValid(int client) {
 }
 
 bool CanClientTarget(int client, int target) {
-	DebugToFile(1, "CanClientTarget: %d %d", client, target);
+	Echo(1, "CanClientTarget: %d %d", client, target);
 
 	if (client == target) {
 		return true;
@@ -445,7 +503,7 @@ bool CanClientTarget(int client, int target) {
 }
 
 int GetPlayClient(int client) {
-	DebugToFile(2, "GetPlayClient: %d", client);
+	Echo(2, "GetPlayClient: %d", client);
 
 	if (GetQRecord(client)) {
 		return g_target;
@@ -459,7 +517,7 @@ int GetPlayClient(int client) {
 }
 
 int ClientHomeTeam(int client) {
-	DebugToFile(1, "ClientHomeTeam: %d", client);
+	Echo(1, "ClientHomeTeam: %d", client);
 
 	if (GetQRecord(client)) {
 		return g_onteam;
@@ -477,7 +535,7 @@ int ClientHomeTeam(int client) {
 // ================================================================== //
 
 bool SetQKey(int client) {
-	DebugToFile(2, "SetQKey: %d", client);
+	Echo(2, "SetQKey: %d", client);
 
 	if (IsClientValid(client) && !IsFakeClient(client)) {
 		if (GetClientAuthId(client, AuthId_Steam2, g_QKey, sizeof(g_QKey), true)) {
@@ -489,7 +547,7 @@ bool SetQKey(int client) {
 }
 
 bool GetQRecord(int client) {
-	DebugToFile(2, "GetQRecord: %d", client);
+	Echo(2, "GetQRecord: %d", client);
 
 	if (SetQKey(client)) {
 		if (g_QDB.GetValue(g_QKey, g_QRecord)) {
@@ -523,7 +581,7 @@ bool GetQRecord(int client) {
 }
 
 bool NewQRecord(int client) {
-	DebugToFile(2, "NewQRecord: %d", client);
+	Echo(2, "NewQRecord: %d", client);
 
 	g_QRecord = new StringMap();
 
@@ -541,7 +599,7 @@ bool NewQRecord(int client) {
 }
 
 int SetQRecord(int client) {
-	DebugToFile(2, "SetQRecord: %d", client);
+	Echo(2, "SetQRecord: %d", client);
 
 	int result = -1;
 
@@ -562,7 +620,7 @@ int SetQRecord(int client) {
 }
 
 public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
-	DebugToFile(1, "OnSpawnHook: %s", name);
+	Echo(1, "OnSpawnHook: %s", name);
 
 	int userid = GetEventInt(event, "userid");
 	int client = GetClientOfUserId(userid);
@@ -591,31 +649,33 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 }
 
 public OnDeathHook(Handle event, const char[] name, bool dontBroadcast) {
-	DebugToFile(3, "OnDeathHook: %s", name);
+	Echo(3, "OnDeathHook: %s", name);
 
 	int userid = GetEventInt(event, "userid");
 	int client = GetClientOfUserId(userid);
-	int playClient = GetPlayClient(client);
 
-	if (GetQRecord(playClient)) {
-		float origin[3];
-		GetClientAbsOrigin(client, origin);
-		g_QRecord.SetArray("origin", origin, sizeof(origin), true);
+	if (GetQRecord(client)) {
+		GetClientAbsOrigin(client, g_origin);
+		g_QRecord.SetValue("target", client, true);
+		g_QRecord.SetArray("origin", g_origin, sizeof(g_origin), true);
 
-		if (g_onteam == 3) {
-			g_QRecord.SetValue("target", g_client, true);
-			g_QRecord.SetValue("queued", true, true);
-			SwitchToSpec(client);
+		switch (g_onteam) {
+			case 3: {
+				g_QRecord.SetValue("queued", true, true);
+				SwitchToSpec(client);
+			}
+
+			case 2: {
+				GenericMenuCleaner(client);
+				menuArg0 = client;
+				SwitchToBotHandler(client, 1);
+			}
 		}
-
-		GenericMenuCleaner(playClient);
-		menuArg0 = playClient;
-		SwitchToBotHandler(playClient, 1);
 	}
 }
 
 public QTeamHook(Handle event, const char[] name, bool dontBroadcast) {
-	DebugToFile(1, "QTeamHook: %s", name);
+	Echo(1, "QTeamHook: %s", name);
 
 	int userid = GetEventInt(event, "userid");
 	int client = GetClientOfUserId(userid);
@@ -626,6 +686,7 @@ public QTeamHook(Handle event, const char[] name, bool dontBroadcast) {
 			g_QRecord.SetValue("inspec", false, true);
 			g_QRecord.SetValue("target", client, true);
 			g_QRecord.SetValue("onteam", onteam, true);
+			g_QRecord.SetValue("queued", false, true);
 
 			if (onteam == 3) {
 				g_QRecord.SetString("model", "", true);
@@ -639,17 +700,19 @@ public QTeamHook(Handle event, const char[] name, bool dontBroadcast) {
 }
 
 public Action QTeamHookTimer(Handle timer, any client) {
-	DebugToFile(1, "QTeamHookTimer: %d", client);
+	Echo(1, "QTeamHookTimer: %d", client);
 
 	if (GetQRecord(client) && !g_inspec) {
-		if (IsClientValid(g_target) && g_target != client) {
-			SetHumanSpecSig(g_target, client);
+		if (g_onteam == 2) {
+			if (IsClientValid(g_target) && g_target != client) {
+				SetHumanSpecSig(g_target, client);
+			}
 		}
 	}
 }
 
 public QAfkHook(Handle event, const char[] name, bool dontBroadcast) {
-	DebugToFile(1, "QAfkHook: %s", name);
+	Echo(1, "QAfkHook: %s", name);
 
 	int client = GetClientOfUserId(GetEventInt(event, "player"));
 	int target = GetClientOfUserId(GetEventInt(event, "bot"));
@@ -676,7 +739,7 @@ public QAfkHook(Handle event, const char[] name, bool dontBroadcast) {
 }
 
 public QBakHook(Handle event, const char[] name, bool dontBroadcast) {
-	DebugToFile(1, "QBakHook: %s", name);
+	Echo(1, "QBakHook: %s", name);
 
 	int client = GetClientOfUserId(GetEventInt(event, "player"));
 	int target = GetClientOfUserId(GetEventInt(event, "bot"));
@@ -706,7 +769,7 @@ public QBakHook(Handle event, const char[] name, bool dontBroadcast) {
 // ================================================================== //
 
 StripClient(int client) {
-	DebugToFile(1, "StripClient: %d", client);
+	Echo(1, "StripClient: %d", client);
 
 	for (int i = 0 ; i < 5 ; i++) {
 		StripClientSlot(client, i);
@@ -714,7 +777,7 @@ StripClient(int client) {
 }
 
 StripClientSlot(int client, int slot) {
-	DebugToFile(1, "StripClientSlot: %d %d", client, slot);
+	Echo(1, "StripClientSlot: %d %d", client, slot);
 
 	client = GetPlayClient(client);
 
@@ -728,7 +791,7 @@ StripClientSlot(int client, int slot) {
 }
 
 RespawnClient(int client, int target=0) {
-	DebugToFile(1, "RespawnClient: %d %d", client, target);
+	Echo(1, "RespawnClient: %d %d", client, target);
 
 	if (!IsClientValid(client)) {
 		return;
@@ -760,7 +823,7 @@ RespawnClient(int client, int target=0) {
 }
 
 TeleportClient(int client, int target) {
-	DebugToFile(1, "TeleportClient: %d %d", client, target);
+	Echo(1, "TeleportClient: %d %d", client, target);
 
 	float origin[3];
 	client = GetPlayClient(client);
@@ -773,7 +836,7 @@ TeleportClient(int client, int target) {
 }
 
 int GetSafeClient(int client) {
-	DebugToFile(1, "GetSafeClient: %d", client);
+	Echo(1, "GetSafeClient: %d", client);
 
 	client = GetPlayClient(client);
 	int onteam = GetClientTeam(client);
@@ -792,7 +855,7 @@ int GetSafeClient(int client) {
 }
 
 bool AddSurvivor() {
-	DebugToFile(1, "AddSurvivor");
+	Echo(1, "AddSurvivor");
 
 	bool result = false;
 	int survivor = CreateFakeClient("SURVIVOR");
@@ -812,7 +875,7 @@ bool AddSurvivor() {
 }
 
 GhostsModeProtector(int state) {
-	DebugToFile(1, "GhostsModeProtector: %d", state);
+	Echo(1, "GhostsModeProtector: %d", state);
 	// CAREFUL: 0 starts this function and you must close it with 1 or
 	// risk breaking things. Close this with 1 immediately when done.
 
@@ -847,7 +910,7 @@ GhostsModeProtector(int state) {
 }
 
 bool AddInfected() {
-	DebugToFile(1, "AddInfected");
+	Echo(1, "AddInfected");
 
 	bool result = false;
 	int index;
@@ -873,7 +936,7 @@ bool AddInfected() {
 }
 
 SwitchToSpec(int client, int onteam=1) {
-	DebugToFile(1, "SwitchToSpectator: %d", client);
+	Echo(1, "SwitchToSpectator: %d", client);
 
 	if (GetQRecord(client)) {
 		g_QRecord.SetValue("inspec", true, true);
@@ -882,7 +945,7 @@ SwitchToSpec(int client, int onteam=1) {
 }
 
 QuickCheat(int client, char [] cmd, char [] arg) {
-	DebugToFile(1, "QuickCheat: %d %s %s", client, cmd, arg);
+	Echo(1, "QuickCheat: %d %s %s", client, cmd, arg);
 
 	int flags = GetCommandFlags(cmd);
 	SetCommandFlags(cmd, flags & ~FCVAR_CHEAT);
@@ -891,7 +954,7 @@ QuickCheat(int client, char [] cmd, char [] arg) {
 }
 
 SwitchToBot(int client, int bot, bool si_ghost=true) {
-	DebugToFile(1, "SwitchToBot: %d %d %d", client, bot, si_ghost);
+	Echo(1, "SwitchToBot: %d %d %d", client, bot, si_ghost);
 
 	if (client != bot && IsClientValid(bot)) {
 		int onteam = GetClientTeam(bot);
@@ -904,7 +967,7 @@ SwitchToBot(int client, int bot, bool si_ghost=true) {
 }
 
 SwitchToBotMiddleManWTF(int client, int bot, int onteam, bool si_ghost=true) {
-	DebugToFile(1, "SwitchToBotMiddleManWTF: %d %d %d %d", client, bot, onteam, si_ghost);
+	Echo(1, "SwitchToBotMiddleManWTF: %d %d %d %d", client, bot, onteam, si_ghost);
 
 	DataPack pack;
 	CreateDataTimer(0.1, SwitchToBotTimer, pack);
@@ -915,7 +978,7 @@ SwitchToBotMiddleManWTF(int client, int bot, int onteam, bool si_ghost=true) {
 }
 
 public Action SwitchToBotTimer(Handle timer, Handle pack) {
-	DebugToFile(1, "SwitchToBotTimer");
+	Echo(1, "SwitchToBotTimer");
 
 	int client;
 	int bot;
@@ -948,7 +1011,7 @@ public Action SwitchToBotTimer(Handle timer, Handle pack) {
 }
 
 TakeOver(int client, int onteam) {
-	DebugToFile(1, "TakeOver: %d %d", client, onteam);
+	Echo(1, "TakeOver: %d %d", client, onteam);
 
 	if (GetQRecord(client)) {
 		StringMap R = g_QRecord;
@@ -982,7 +1045,7 @@ TakeOver(int client, int onteam) {
 }
 
 public Action TakeOverTimer(Handle timer, any client) {
-	DebugToFile(3, "TakeOverTimer: %d", client);
+	Echo(3, "TakeOverTimer: %d", client);
 
 	if (CountTeamMates(2) <= 0) {
 		return Plugin_Handled;
@@ -1022,7 +1085,7 @@ public Action TakeOverTimer(Handle timer, any client) {
 
 
 int CountTeamMates(int onteam, int mtype=2) {
-	DebugToFile(1, "CountTeamMates: %d %d", onteam, mtype);
+	Echo(1, "CountTeamMates: %d %d", onteam, mtype);
 
 	// mtype 0: counts only bots
 	// mtype 1: counts only humans
@@ -1057,7 +1120,7 @@ int CountTeamMates(int onteam, int mtype=2) {
 }
 
 int GetClientManager(int target) {
-	DebugToFile(3, "GetClientManager: %d", target);
+	Echo(3, "GetClientManager: %d", target);
 
 	int result;
 	int userid;
@@ -1099,7 +1162,7 @@ int GetClientManager(int target) {
 }
 
 int GetNextBot(int onteam, int skipIndex=1) {
-	DebugToFile(1, "GetNextBot: %d %d", onteam, skipIndex);
+	Echo(1, "GetNextBot: %d %d", onteam, skipIndex);
 
 	int bot;
 
@@ -1122,7 +1185,7 @@ int GetNextBot(int onteam, int skipIndex=1) {
 }
 
 CycleBots(int client, int onteam) {
-	DebugToFile(1, "CycleBots: %d %d", client, onteam);
+	Echo(1, "CycleBots: %d %d", client, onteam);
 
 	if (onteam <= 1) {
 		return;
@@ -1137,7 +1200,7 @@ CycleBots(int client, int onteam) {
 }
 
 SwitchTeam(int client, int onteam) {
-	DebugToFile(1, "SwitchTeam: %d %d", client, onteam);
+	Echo(1, "SwitchTeam: %d %d", client, onteam);
 
 	if (!GetQRecord(client)) {
 		return;
@@ -1167,7 +1230,7 @@ SwitchTeam(int client, int onteam) {
 }
 
 public Action MkBotsCmd(int client, args) {
-	DebugToFile(1, "MkBotsCmd: %d", client);
+	Echo(1, "MkBotsCmd: %d", client);
 
 	switch(args) {
 		case 2: {
@@ -1184,7 +1247,7 @@ public Action MkBotsCmd(int client, args) {
 }
 
 MkBots(int asmany, int onteam) {
-	DebugToFile(1, "MkBots: %d %d", asmany, onteam);
+	Echo(1, "MkBots: %d %d", asmany, onteam);
 
 	if (asmany < 0) {
 		asmany = asmany * -1 - CountTeamMates(onteam);
@@ -1203,7 +1266,7 @@ MkBots(int asmany, int onteam) {
 }
 
 public Action MkBotsTimer(Handle timer, any asmany) {
-	DebugToFile(1, "MkBotsTimer: %d", asmany);
+	Echo(1, "MkBotsTimer: %d", asmany);
 	static i;
 
 	if (i++ < asmany) {
@@ -1216,7 +1279,7 @@ public Action MkBotsTimer(Handle timer, any asmany) {
 }
 
 public Action RmBotsCmd(int client, args) {
-	DebugToFile(1, "RmBotsCmd: %d", client);
+	Echo(1, "RmBotsCmd: %d", client);
 
 	int asmany;
 	int onteam;
@@ -1242,7 +1305,7 @@ public Action RmBotsCmd(int client, args) {
 }
 
 RmBots(int asmany, int onteam) {
-	DebugToFile(1, "RmBots: %d %d", asmany, onteam);
+	Echo(1, "RmBots: %d %d", asmany, onteam);
 
 	int j;
 
@@ -1281,7 +1344,7 @@ RmBots(int asmany, int onteam) {
 // ================================================================== //
 
 public Action AutoModelTimer(Handle timer, any client) {
-	DebugToFile(1, "AutoModelTimer: %d", client);
+	Echo(1, "AutoModelTimer: %d", client);
 
 	if (!IsClientValid(client)) {
 		return Plugin_Handled;
@@ -1328,19 +1391,19 @@ public Action AutoModelTimer(Handle timer, any client) {
 }
 
 PrecacheModels() {
-	DebugToFile(1, "PrecacheModels");
+	Echo(1, "PrecacheModels");
 
 	for (int i = 0 ; i < sizeof(g_SurvivorPaths) ; i++) {
 		Format(g_sB, sizeof(g_sB), "%s", g_SurvivorPaths[i]);
 		if (!IsModelPrecached(g_sB)) {
 			int retcode = PrecacheModel(g_sB);
-			PrintToServer(" - Precaching %s, retcode: %d", g_sB, retcode);
+			Echo(1, " - Precaching %s, retcode: %d", g_sB, retcode);
 		}
 	}
 }
 
 AssignModel(int client, char [] model) {
-	DebugToFile(1, "AssignModel: %d %s", client, model);
+	Echo(1, "AssignModel: %d %s", client, model);
 
 	if (GetClientTeam(client) != 2 || IsClientsModel(client, model)) {
 		return;
@@ -1372,7 +1435,7 @@ AssignModel(int client, char [] model) {
 }
 
 int GetClientModelIndex(int client) {
-	DebugToFile(2, "GetClientModelIndex: %d", client);
+	Echo(2, "GetClientModelIndex: %d", client);
 
 	if (!IsClientValid(client)) {
 		return -2;
@@ -1391,7 +1454,7 @@ int GetClientModelIndex(int client) {
 }
 
 int GetModelIndexByName(char [] name) {
-	DebugToFile(1, "GetModelIndexByName: %s", name);
+	Echo(1, "GetModelIndexByName: %s", name);
 
 	for (int i = 0 ; i < sizeof(g_SurvivorNames) ; i ++) {
 		if (StrContains(name, g_SurvivorNames[i], false) != -1) {
@@ -1403,7 +1466,7 @@ int GetModelIndexByName(char [] name) {
 }
 
 bool IsClientsModel(int client, char [] name) {
-	DebugToFile(1, "IsClientsModel: %d %s", client, name);
+	Echo(1, "IsClientsModel: %d %s", client, name);
 
 	int modelIndex = GetClientModelIndex(client);
 	Format(g_sB, sizeof(g_sB), "%s", g_SurvivorNames[modelIndex]);
@@ -1415,21 +1478,21 @@ bool IsClientsModel(int client, char [] name) {
 // ================================================================== //
 
 int GetOS() {
-	DebugToFile(1, "GetOS");
+	Echo(1, "GetOS");
 	return GameConfGetOffset(g_GameData, "OS");
 }
 
 void RoundRespawnSig(int client) {
-	DebugToFile(1, "RoundRespawnSig: %d", client);
+	Echo(1, "RoundRespawnSig: %d", client);
 
-	static Handle hRoundRespawn = INVALID_HANDLE;
-	if (hRoundRespawn == INVALID_HANDLE) {
+	static Handle hRoundRespawn;
+	if (hRoundRespawn == null) {
 		StartPrepSDKCall(SDKCall_Player);
 		PrepSDKCall_SetFromConf(g_GameData, SDKConf_Signature, "RoundRespawn");
 		hRoundRespawn = EndPrepSDKCall();
 	}
 
-	if (hRoundRespawn != INVALID_HANDLE) {
+	if (hRoundRespawn != null) {
 		SDKCall(hRoundRespawn, client);
 	}
 
@@ -1439,17 +1502,17 @@ void RoundRespawnSig(int client) {
 }
 
 void SetHumanSpecSig(int bot, int client) {
-	DebugToFile(1, "SetHumanSpecSig: %d %d", bot, client);
+	Echo(1, "SetHumanSpecSig: %d %d", bot, client);
 
-	static Handle hSpec = INVALID_HANDLE;
-	if (hSpec == INVALID_HANDLE) {
+	static Handle hSpec;
+	if (hSpec == null) {
 		StartPrepSDKCall(SDKCall_Player);
 		PrepSDKCall_SetFromConf(g_GameData, SDKConf_Signature, "SetHumanSpec");
 		PrepSDKCall_AddParameter(SDKType_CBasePlayer, SDKPass_Pointer);
 		hSpec = EndPrepSDKCall();
 	}
 
-	if(hSpec != INVALID_HANDLE) {
+	if(hSpec != null) {
 		SDKCall(hSpec, bot, client);
 	}
 
@@ -1459,17 +1522,17 @@ void SetHumanSpecSig(int bot, int client) {
 }
 
 void State_TransitionSig(int client, int mode) {
-	DebugToFile(1, "State_TransitionSig: %d %d", client, mode);
+	Echo(1, "State_TransitionSig: %d %d", client, mode);
 
-	static Handle hSpec = INVALID_HANDLE;
-	if (hSpec == INVALID_HANDLE) {
+	static Handle hSpec;
+	if (hSpec == null) {
 		StartPrepSDKCall(SDKCall_Player);
 		PrepSDKCall_SetFromConf(g_GameData, SDKConf_Signature, "State_Transition");
 		PrepSDKCall_AddParameter(SDKType_PlainOldData , SDKPass_Plain);
 		hSpec = EndPrepSDKCall();
 	}
 
-	if(hSpec != INVALID_HANDLE) {
+	if(hSpec != null) {
 		SDKCall(hSpec, client, mode);  // mode 8, press 8 to get closer
 	}
 
@@ -1479,17 +1542,17 @@ void State_TransitionSig(int client, int mode) {
 }
 
 void TakeOverBotSig(int client) {
-	DebugToFile(1, "TakeOverBotSig: %d", client);
+	Echo(1, "TakeOverBotSig: %d", client);
 
-	static Handle hSwitch = INVALID_HANDLE;
-	if (hSwitch == INVALID_HANDLE) {
+	static Handle hSwitch;
+	if (hSwitch == null) {
 		StartPrepSDKCall(SDKCall_Player);
 		PrepSDKCall_SetFromConf(g_GameData, SDKConf_Signature, "TakeOverBot");
 		PrepSDKCall_AddParameter(SDKType_Bool, SDKPass_Plain);
 		hSwitch = EndPrepSDKCall();
 	}
 
-	if (hSwitch != INVALID_HANDLE) {
+	if (hSwitch != null) {
 		SDKCall(hSwitch, client, true);
 	}
 
@@ -1500,17 +1563,17 @@ void TakeOverBotSig(int client) {
 }
 
 void TakeOverZombieBotSig(int client, int bot) {
-	DebugToFile(1, "TakeOverZombieBotSig: %d %d", client, bot);
+	Echo(1, "TakeOverZombieBotSig: %d %d", client, bot);
 
-	static Handle hSwitch = INVALID_HANDLE;
-	if (hSwitch == INVALID_HANDLE) {
+	static Handle hSwitch;
+	if (hSwitch == null) {
 		StartPrepSDKCall(SDKCall_Player);
 		PrepSDKCall_SetFromConf(g_GameData, SDKConf_Signature, "TakeOverZombieBot");
 		PrepSDKCall_AddParameter(SDKType_CBasePlayer, SDKPass_Pointer);
 		hSwitch = EndPrepSDKCall();
 	}
 
-	if (hSwitch != INVALID_HANDLE) {
+	if (hSwitch != null) {
 		SDKCall(hSwitch, client, bot);
 	}
 
@@ -1524,7 +1587,7 @@ void TakeOverZombieBotSig(int client, int bot) {
 // ================================================================== //
 
 public Action TeleportClientCmd(int client, args) {
-	DebugToFile(1, "TeleportClientCmd: %d", client);
+	Echo(1, "TeleportClientCmd: %d", client);
 
 	int level;
 
@@ -1551,7 +1614,7 @@ public Action TeleportClientCmd(int client, args) {
 }
 
 public TeleportClientHandler(int client, int level) {
-	DebugToFile(1, "TeleportClientHandler: %d %d", client, level);
+	Echo(1, "TeleportClientHandler: %d %d", client, level);
 
 	if (!RegMenuHandler(client, "TeleportClientHandler", level, 0)) {
 		return;
@@ -1580,7 +1643,7 @@ public TeleportClientHandler(int client, int level) {
 }
 
 public Action SwitchTeamCmd(int client, args) {
-	DebugToFile(1, "SwitchTeamCmd: %d", client);
+	Echo(1, "SwitchTeamCmd: %d", client);
 
 	int level;
 
@@ -1613,7 +1676,7 @@ public Action SwitchTeamCmd(int client, args) {
 }
 
 public SwitchTeamHandler(int client, int level) {
-	DebugToFile(1, "SwitchTeamHandler: %d %d", client, level);
+	Echo(1, "SwitchTeamHandler: %d %d", client, level);
 
 	if (!RegMenuHandler(client, "SwitchTeamHandler", level, 0)) {
 		return;
@@ -1643,7 +1706,7 @@ public SwitchTeamHandler(int client, int level) {
 }
 
 public Action AssignModelCmd(int client, args) {
-	DebugToFile(1, "AssignModelCmd: %d", client);
+	Echo(1, "AssignModelCmd: %d", client);
 
 	int level;
 
@@ -1671,7 +1734,7 @@ public Action AssignModelCmd(int client, args) {
 }
 
 public AssignModelHandler(int client, int level) {
-	DebugToFile(1, "AssignModelHandler: %d %d", client, level);
+	Echo(1, "AssignModelHandler: %d %d", client, level);
 
 	if (!RegMenuHandler(client, "AssignModelHandler", level, 0)) {
 		return;
@@ -1700,7 +1763,7 @@ public AssignModelHandler(int client, int level) {
 }
 
 public Action SwitchToBotCmd(int client, args) {
-	DebugToFile(1, "SwitchToBotCmd: %d", client);
+	Echo(1, "SwitchToBotCmd: %d", client);
 
 	int level;
 
@@ -1733,7 +1796,7 @@ public Action SwitchToBotCmd(int client, args) {
 }
 
 public SwitchToBotHandler(int client, int level) {
-	DebugToFile(1, "SwitchToBotHandler: %d %d", client, level);
+	Echo(1, "SwitchToBotHandler: %d %d", client, level);
 
 	int homeTeam = ClientHomeTeam(client);
 	if (!RegMenuHandler(client, "SwitchToBotHandler", level, 0)) {
@@ -1770,7 +1833,7 @@ public SwitchToBotHandler(int client, int level) {
 }
 
 public Action RespawnClientCmd(int client, args) {
-	DebugToFile(1, "RespawnClientCmd: %d", client);
+	Echo(1, "RespawnClientCmd: %d", client);
 
 	int level;
 
@@ -1798,7 +1861,7 @@ public Action RespawnClientCmd(int client, args) {
 }
 
 public RespawnClientHandler(int client, int level) {
-	DebugToFile(1, "RespawnClientHandler: %d %d", client, level);
+	Echo(1, "RespawnClientHandler: %d %d", client, level);
 
 	if (!RegMenuHandler(client, "RespawnClientHandler", level, 0)) {
 		return;
@@ -1827,7 +1890,7 @@ public RespawnClientHandler(int client, int level) {
 }
 
 public Action CycleBotsCmd(int client, args) {
-	DebugToFile(1, "CycleBotsCmd: %d", client);
+	Echo(1, "CycleBotsCmd: %d", client);
 
 	int level;
 
@@ -1859,7 +1922,7 @@ public Action CycleBotsCmd(int client, args) {
 }
 
 public CycleBotsHandler(int client, int level) {
-	DebugToFile(1, "CycleBotsHandler: %d %d", client, level);
+	Echo(1, "CycleBotsHandler: %d %d", client, level);
 
 	if (!RegMenuHandler(client, "CycleBotsHandler", level, 0)) {
 		return;
@@ -1890,7 +1953,7 @@ public CycleBotsHandler(int client, int level) {
 }
 
 public Action StripClientCmd(int client, args) {
-	DebugToFile(1, "StripClientCmd: %d", client);
+	Echo(1, "StripClientCmd: %d", client);
 
 	int target;
 	int level;
@@ -1925,7 +1988,7 @@ public Action StripClientCmd(int client, args) {
 }
 
 public StripClientHandler(int client, int level) {
-	DebugToFile(1, "StripClientHandler: %d %d", client, level);
+	Echo(1, "StripClientHandler: %d %d", client, level);
 
 	if (!RegMenuHandler(client, "StripClientHandler", level, 0)) {
 		return;
@@ -1954,18 +2017,18 @@ public StripClientHandler(int client, int level) {
 }
 
 public Action ResetCmd(int client, args) {
-	DebugToFile(1, "ResetCmd: %d", client);
+	Echo(1, "ResetCmd: %d", client);
 
 	for (int i = 1 ; i <= MaxClients ; i++) {
 		GenericMenuCleaner(i);
 		if (GetQRecord(i)) {
-			CancelClientMenu(i, true, INVALID_HANDLE);
+			CancelClientMenu(i, true, null);
 		}
 	}
 }
 
 bool RegMenuHandler(int client, char [] handler, int level, int clearance=0) {
-	DebugToFile(1, "RegMenuHandler: %d %s %d %d", client, handler, level, clearance);
+	Echo(1, "RegMenuHandler: %d %s %d %d", client, handler, level, clearance);
 
 	g_callBacks.PushString(handler);
 	if (!IsAdmin(client) && level <= clearance) {
@@ -1977,7 +2040,7 @@ bool RegMenuHandler(int client, char [] handler, int level, int clearance=0) {
 }
 
 public Action MainMenuCmd(int client, args) {
-	DebugToFile(1, "MainMenuCmd: %d", client);
+	Echo(1, "MainMenuCmd: %d", client);
 
 	GenericMenuCleaner(client);
 	MainMenuHandler(client, 0);
@@ -1985,7 +2048,7 @@ public Action MainMenuCmd(int client, args) {
 }
 
 public MainMenuHandler(int client, int level) {
-	DebugToFile(1, "MainMenuHandler: %d %d", client, level);
+	Echo(1, "MainMenuHandler: %d %d", client, level);
 
 	if (!RegMenuHandler(client, "MainMenuHandler", level, 0)) {
 		return;
@@ -2018,15 +2081,15 @@ public MainMenuHandler(int client, int level) {
 // ================================================================== //
 
 GenericMenuCleaner(int client, bool clearStack=true) {
-	DebugToFile(1, "GenericMenuCleaner: %d %d", client, clearStack);
+	Echo(1, "GenericMenuCleaner: %d %d", client, clearStack);
 
 	for (int i = 0 ; i < sizeof(g_menuItems[]) ; i++) {
 		g_menuItems[client][i] = 0;
 	}
 
 	if (clearStack == true) {
-		if (g_callBacks != INVALID_HANDLE) {
-			CloseHandle(g_callBacks);
+		if (g_callBacks != null) {
+			delete g_callBacks;
 		}
 
 		g_callBacks = new ArrayStack(128);
@@ -2034,7 +2097,7 @@ GenericMenuCleaner(int client, bool clearStack=true) {
 }
 
 public GenericMenuHandler(Menu menu, MenuAction action, int param1, int param2) {
-	DebugToFile(1, "GenericMenuHandler: %d %d", param1, param2);
+	Echo(1, "GenericMenuHandler: %d %d", param1, param2);
 
 	int client = param1;
 	int i;  // -1;
@@ -2099,7 +2162,7 @@ public GenericMenuHandler(Menu menu, MenuAction action, int param1, int param2) 
 		}
 	}
 
-	if (g_callBacks == INVALID_HANDLE || g_callBacks.Empty) {
+	if (g_callBacks == null || g_callBacks.Empty) {
 		GenericMenuCleaner(param1);
 		return;
 	}
@@ -2118,7 +2181,7 @@ public GenericMenuHandler(Menu menu, MenuAction action, int param1, int param2) 
 // ================================================================== //
 
 MainMenu(int client, char [] title) {
-	DebugToFile(1, "MainMenu: %d %s", client, title);
+	Echo(1, "MainMenu: %d %s", client, title);
 
 	Menu menu = new Menu(GenericMenuHandler);
 	menu.SetTitle(title);
@@ -2135,14 +2198,14 @@ MainMenu(int client, char [] title) {
 }
 
 InvSlotsMenu(int client, int target, char [] title) {
-	DebugToFile(1, "InvSlotsMenu: %d %d %s", client, target, title);
+	Echo(1, "InvSlotsMenu: %d %d %s", client, target, title);
 
 	int ent;
 	char weapon[64];
 	Menu menu = new Menu(GenericMenuHandler);
 	menu.SetTitle(title);
 
-	for (new i = 0 ; i < 5 ; i++) {
+	for (int i ; i < 5 ; i++) {
 		IntToString(i, g_sB, sizeof(g_sB));
 		ent = GetPlayerWeaponSlot(target, i);
 
@@ -2158,12 +2221,12 @@ InvSlotsMenu(int client, int target, char [] title) {
 }
 
 ModelsMenu(int client, char [] title) {
-	DebugToFile(1, "ModelsMenu: %d %s", client, title);
+	Echo(1, "ModelsMenu: %d %s", client, title);
 
 	Menu menu = new Menu(GenericMenuHandler);
 	menu.SetTitle(title);
 
-	for (new i = 0 ; i < sizeof(g_SurvivorNames) ; i++) {
+	for (int i ; i < sizeof(g_SurvivorNames) ; i++) {
 		IntToString(i, g_sB, sizeof(g_sB));
 		menu.AddItem(g_sB, g_SurvivorNames[i]);
 	}
@@ -2174,7 +2237,7 @@ ModelsMenu(int client, char [] title) {
 }
 
 TeamsMenu(int client, char [] title, bool all=true) {
-	DebugToFile(1, "TeamsMenu: %d %s", client, title);
+	Echo(1, "TeamsMenu: %d %s", client, title);
 
 	Menu menu = new Menu(GenericMenuHandler);
 	menu.SetTitle(title);
@@ -2195,7 +2258,7 @@ TeamsMenu(int client, char [] title, bool all=true) {
 
 TeamMatesMenu(int client, char [] title, int mtype=2, int target=0, bool incDead=true,
 			  bool repeat=false, int homeTeam=0) {
-	DebugToFile(1, "TeamMatesMenu: %d %s %d %d %d %d", client, title, mtype, target, incDead, repeat);
+	Echo(1, "TeamMatesMenu: %d %s %d %d %d %d", client, title, mtype, target, incDead, repeat);
 
 	Menu menu = new Menu(GenericMenuHandler);
 	menu.SetTitle(title);
@@ -2304,7 +2367,7 @@ TeamMatesMenu(int client, char [] title, int mtype=2, int target=0, bool incDead
 // MISC STUFF USEFUL FOR TROUBLESHOOTING
 // ================================================================== //
 
-DebugToFile(int level, char [] format, any ...) {
+Echo(int level, char [] format, any ...) {
 	if (g_LogLevel >= level) {
 		VFormat(g_dB, sizeof(g_dB), format, 3);
 		LogToFile(LOGFILE, g_dB);
@@ -2313,7 +2376,7 @@ DebugToFile(int level, char [] format, any ...) {
 }
 
 QDBCheckCmd(client) {
-	DebugToFile(1, "QDBCheckCmd");
+	Echo(1, "QDBCheckCmd");
 
 	PrintToConsole(client, "-- STAT: QDB Size is %d", g_QDB.Size);
 	PrintToConsole(client, "-- MinPlayers is %d", g_MinPlayers);
@@ -2351,7 +2414,7 @@ QDBCheckCmd(client) {
 }
 
 public Action QuickClientPrintCmd(int client, args) {
-	DebugToFile(1, "QuickClientPrintCmd: %d", client);
+	Echo(1, "QuickClientPrintCmd: %d", client);
 
 	int onteam;
 	int state;
