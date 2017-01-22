@@ -21,12 +21,16 @@ Free Software Foundation, Inc.
 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+// TODO:
+//SetEntProp(client, Prop_Send,"m_bHasNightVision", 1);
+//SetEntProp(client, Prop_Send, "m_bNightVisionOn", 1);
+
 #pragma semicolon 1
 #include <sourcemod>
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.19"
+#define PLUGIN_VERSION "0.1.23"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -47,6 +51,7 @@ new Function:callBack;
 char g_QKey[64];      // holds players by STEAM_ID
 StringMap g_QDB;      // holds player records linked by STEAM_ID
 StringMap g_QRecord;  // changes to an individual STEAM_ID mapping
+StringMap g_Cvars;
 
 //char g_SpecialNames[8][] = {"Tank", "Boomer", "Smoker", "Witch", "Hunter", "Spitter", "Jockey", "Charger"};
 char g_SpecialNames[6][] = {"Boomer", "Smoker", "Hunter", "Spitter", "Jockey", "Charger"};
@@ -79,7 +84,9 @@ Handle g_AD;                        // Assistant Director Timer
 
 char g_GameMode[16];
 bool g_IsVs = false;
+bool g_IsCoop = false;
 bool g_AssistedSpawning = false;
+bool g_AddedPlayers = false;
 bool g_ADFreeze = true;
 int g_ADInterval;
 
@@ -91,6 +98,10 @@ ConVar g_cvThrowable;
 ConVar g_cvHealItem;
 ConVar g_cvConsumable;
 ConVar g_cvZoey;
+ConVar g_cvExtraPlayers;
+ConVar g_cvTankHealth;
+ConVar g_cvTankChunkHp;
+ConVar g_cvSpawnInterval;
 
 int g_LogLevel;
 int g_MinPlayers;
@@ -100,6 +111,9 @@ char g_Throwable[64];
 char g_HealItem[64];
 char g_Consumable[64];
 int g_Zoey;
+int g_ExtraPlayers;
+int g_TankChunkHp;
+int g_SpawnInterval;
 
 public Plugin myinfo= {
 	name = "ABM",
@@ -130,7 +144,7 @@ public OnPluginStart() {
 	HookEvent("mission_lost", RoundFreezeEndHook, EventHookMode_Pre);
 	HookEvent("round_freeze_end", RoundFreezeEndHook, EventHookMode_Pre);
 	HookEvent("map_transition", RoundFreezeEndHook, EventHookMode_Pre);
-	HookEvent("round_start", RoundStartHook);
+	HookEvent("round_start", RoundStartHook, EventHookMode_Post);
 
 	RegAdminCmd("abm", MainMenuCmd, ADMFLAG_GENERIC);
 	RegAdminCmd("abm-menu", MainMenuCmd, ADMFLAG_GENERIC);
@@ -151,6 +165,7 @@ public OnPluginStart() {
 	g_OS = GetOS();  // 0: Linux 1: Windows
 	g_QDB = new StringMap();
 	g_QRecord = new StringMap();
+	g_Cvars = new StringMap();
 
 	for (int i = 1 ; i <= MaxClients ; i++) {
 		g_menuStack[i] = new ArrayStack(128);
@@ -165,17 +180,22 @@ public OnPluginStart() {
 		}
 	}
 
+	g_cvTankHealth = FindConVar("z_tank_health");
 	FindConVar("mp_gamemode").GetString(g_GameMode, sizeof(g_GameMode));
 	g_IsVs = (StrEqual(g_GameMode, "versus") || StrEqual(g_GameMode, "scavenge"));
+	g_IsCoop = StrEqual(g_GameMode, "coop");
 
 	CreateConVar("abm_version", PLUGIN_VERSION, "ABM plugin version", FCVAR_DONTRECORD);
+	g_cvLogLevel = CreateConVar("abm_loglevel", "0", "Logging level of the plugin, 0 is off, up to 4");
 	g_cvMinPlayers = CreateConVar("abm_minplayers", "4", "Pruning extra survivors stops at this size");
 	g_cvPrimaryWeapon = CreateConVar("abm_primaryweapon", "shotgun_chrome", "5+ survivor primary weapon");
 	g_cvSecondaryWeapon = CreateConVar("abm_secondaryweapon", "baseball_bat", "5+ survivor secondary weapon");
 	g_cvThrowable = CreateConVar("abm_throwable", "", "5+ survivor throwable item");
 	g_cvHealItem = CreateConVar("abm_healitem", "", "5+ survivor healing item");
 	g_cvConsumable = CreateConVar("abm_consumable", "adrenaline", "5+ survivor consumable item");
-	g_cvLogLevel = CreateConVar("abm_loglevel", "0", "Level of debugging");
+	g_cvExtraPlayers = CreateConVar("abm_extraplayers", "0", "Extra survivors to start the round with");
+	g_cvTankChunkHp = CreateConVar("abm_tankchunkhp", "2500", "Health chunk per survivor on 5+ missions");
+	g_cvSpawnInterval = CreateConVar("abm_spawninterval", "18", "SI full team spawn in (5 x N)");
 
 	switch(g_OS) {
 		case 0: Format(g_sB, sizeof(g_sB), "5");
@@ -186,16 +206,29 @@ public OnPluginStart() {
 	g_cvZoey = CreateConVar("abm_zoey", g_sB, "0:Nick 1:Rochelle 2:Coach 3:Ellis 4:Bill 5:Zoey 6:Francis 7:Louis");
 
 	HookConVarChange(g_cvLogLevel, UpdateConVarsHook);
-	HookConVarChange(g_cvMinPlayers, UpdateMinPlayersHook);
+	HookConVarChange(g_cvMinPlayers, UpdateConVarsHook);
 	HookConVarChange(g_cvPrimaryWeapon, UpdateConVarsHook);
 	HookConVarChange(g_cvSecondaryWeapon, UpdateConVarsHook);
 	HookConVarChange(g_cvThrowable, UpdateConVarsHook);
 	HookConVarChange(g_cvHealItem, UpdateConVarsHook);
 	HookConVarChange(g_cvConsumable, UpdateConVarsHook);
+	HookConVarChange(g_cvExtraPlayers, UpdateConVarsHook);
+	HookConVarChange(g_cvTankChunkHp, UpdateConVarsHook);
+	HookConVarChange(g_cvSpawnInterval, UpdateConVarsHook);
 	HookConVarChange(g_cvZoey, UpdateConVarsHook);
+
 	UpdateConVarsHook(g_cvLogLevel, "0", "0");
-	UpdateMinPlayersHook(g_cvMinPlayers, "4", "4");
+	UpdateConVarsHook(g_cvMinPlayers, "4", "4");
+	UpdateConVarsHook(g_cvPrimaryWeapon, "shotgun_chrome", "shotgun_chrome");
+	UpdateConVarsHook(g_cvSecondaryWeapon, "baseball_bat", "baseball_bat");
+	UpdateConVarsHook(g_cvThrowable, "", "");
+	UpdateConVarsHook(g_cvHealItem, "", "");
+	UpdateConVarsHook(g_cvConsumable, "adrenaline", "adrenaline");
+	UpdateConVarsHook(g_cvExtraPlayers, "0", "0");
+	UpdateConVarsHook(g_cvTankChunkHp, "2500", "2500");
+	UpdateConVarsHook(g_cvSpawnInterval, "18", "18");
 	UpdateConVarsHook(g_cvZoey, g_sB, g_sB);
+
 	AutoExecConfig(true, "abm");
 	StartAD();
 }
@@ -220,10 +253,6 @@ public RoundFreezeEndHook(Handle event, const char[] name, bool dontBroadcast) {
 		if (g_onteam == 3) {
 			g_QRecord.SetValue("queued", true, true);
 			g_QRecord.SetValue("inspec", true, true);
-			g_QRecord.GetValue("client", g_client);
-
-			ForcePlayerSuicide(g_client);
-			SwitchToSpec(g_client);
 		}
 	}
 
@@ -242,6 +271,7 @@ PlayerActivate(int client) {
 	Echo(1, "PlayerActivate: %d", client);
 
 	if (GetQRecord(client)) {
+		StartAD();
 		AssignModel(client, g_ghost);
 
 		if (g_onteam == 3) {
@@ -258,11 +288,12 @@ public RoundStartHook(Handle event, const char[] name, bool dontBroadcast) {
 bool StopAD() {
 	Echo(1, "StopAD");
 
-	g_ADFreeze = true;
-	g_AssistedSpawning = false;
-	g_ADInterval = 0;
-
 	if (g_AD != null) {
+		g_ADFreeze = true;
+		g_AssistedSpawning = false;
+		g_AddedPlayers = false;
+		g_ADInterval = 0;
+
 		delete g_AD;
 		g_AD = null;
 	}
@@ -273,11 +304,12 @@ bool StopAD() {
 bool StartAD() {
 	Echo(1, "StartAD");
 
-	g_ADFreeze = true;
-	g_AssistedSpawning = false;
-	g_ADInterval = 0;
-
 	if (g_AD == null) {
+		g_ADFreeze = true;
+		g_AssistedSpawning = false;
+		g_AddedPlayers = false;
+		g_ADInterval = 0;
+
 		g_AD = CreateTimer(
 			5.0, ADTimer, _, TIMER_REPEAT
 		);
@@ -301,21 +333,51 @@ public Action ADTimer(Handle timer) {
 		g_ADFreeze = false;
 	}
 
-	g_ADInterval++;
-
-	if (g_AssistedSpawning) {
-		if (g_ADInterval % 5 == 0) {
-			Echo(1, " -- Assisting SI: Matching Full Team");
-			MkBots(CountTeamMates(2) * -1, 3);
-		}
-
-		else if (g_ADInterval % 2 == 0) {
-			Echo(1, " -- Assisting SI: Matching Half Team");
-			MkBots((CountTeamMates(2) / 2) * -1, 3);
+	// add those extra players
+	if (g_ExtraPlayers > 0 && !g_AddedPlayers) {
+		if (CountTeamMates(2) >= 1) {
+			MkBots((g_MinPlayers + g_ExtraPlayers) * -1, 2);
+			g_AddedPlayers = true;
 		}
 	}
 
-// 	int onteam;
+	g_ADInterval++;
+	int teamSize = CountTeamMates(2);
+	static tankMp;
+	static fullVsSpawn;
+	static halfVsSpawn;
+
+	if (!g_IsVs) {
+
+		fullVsSpawn = g_SpawnInterval / 3;
+		halfVsSpawn = fullVsSpawn / 3;
+
+		if (g_IsCoop && teamSize > 4) {  // adjust tank health in coop
+			if (tankMp != teamSize) {
+				tankMp = teamSize;
+				SetConVarInt(g_cvTankHealth, teamSize * g_TankChunkHp);
+			}
+
+			if (g_ADInterval % g_SpawnInterval == 0) {
+				MkBots(teamSize * -1, 3);
+			}
+		}
+
+		if (g_AssistedSpawning) {
+			if (g_ADInterval % fullVsSpawn == 0) {
+				Echo(1, " -- Assisting SI: Matching Full Team");
+				MkBots(teamSize * -1, 3);
+			}
+
+			else if (g_ADInterval % halfVsSpawn == 0) {
+				Echo(1, " -- Assisting SI: Matching Half Team");
+				MkBots((teamSize / 2) * -1, 3);
+			}
+		}
+	}
+
+	int onteam;
+	float nTakeOver = 0.1;
 
 	for (int i = 1 ; i <= MaxClients ; i++) {
 		if (GetQRecord(i)) {
@@ -323,7 +385,7 @@ public Action ADTimer(Handle timer) {
 				if (!g_IsVs) {
 					g_AssistedSpawning = true;
 
-					if (GetClientTeam(i) <= 1) {
+					if (GetClientTeam(i) <= 1 && !g_inspec) {
 						g_QRecord.SetValue("queued", true, true);
 					}
 				}
@@ -331,51 +393,114 @@ public Action ADTimer(Handle timer) {
 				continue;
 			}
 
-// 			onteam = GetClientTeam(i);
-// 			if (onteam == 3) {
-// 				continue;
-// 			}
-//
-// 			switch(onteam) {
-// 				case 1: {  // spectator
-// 					if (g_target != i) {
-// 						if (IsClientValid(g_target)) {
-// 							SetHumanSpecSig(g_target, i);
-// 							return Plugin_Continue;
-// 						}
-// 					}
-//
-// 					CreateTimer(0.1, TakeOverTimer, i);
-// 				}
-//
-// 				case 0: {  // idle
-// 					if (!g_inspec) {
-// 						CreateTimer(0.1, TakeOverTimer, i);
-// 					}
-// 				}
-// 			}
+			onteam = GetClientTeam(i);
+			if (onteam == 3) {
+				continue;
+			}
+
+			if (!g_inspec && onteam <= 1) {
+				CreateTimer(nTakeOver, TakeOverTimer, i);
+				nTakeOver += 0.1;
+			}
 		}
 	}
 
 	return Plugin_Continue;
 }
 
-public UpdateMinPlayersHook(Handle convar, const char[] oldCv, const char[] newCv) {
-	Echo(1, "UpdateMinPlayersHook: %s %s", oldCv, newCv);
-
-	g_MinPlayers = GetConVarInt(g_cvMinPlayers);
-	CreateTimer(0.1, RmBotsTimer, g_MinPlayers * -1);
-}
-
 public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) {
-	Echo(1, "UpdateConVarsHook: %s %s", oldCv, newCv);
+	GetConVarName(convar, g_sB, sizeof(g_sB));
+	Echo(1, "UpdateConVarsHook: %s %s %s", g_sB, oldCv, newCv);
 
-	g_LogLevel = GetConVarInt(g_cvLogLevel);
-	GetConVarString(g_cvPrimaryWeapon, g_PrimaryWeapon, sizeof(g_PrimaryWeapon));
-	GetConVarString(g_cvSecondaryWeapon, g_SecondaryWeapon, sizeof(g_SecondaryWeapon));
-	GetConVarString(g_cvThrowable, g_Throwable, sizeof(g_Throwable));
-	GetConVarString(g_cvHealItem, g_HealItem, sizeof(g_HealItem));
-	GetConVarString(g_cvConsumable, g_Consumable, sizeof(g_Consumable));
+	char name[32];
+	char modCv[32];
+
+	Format(name, sizeof(name), g_sB);
+	Format(modCv, sizeof(modCv), "%s", newCv);
+
+	if (StrContains(newCv, "-l") == 0) {
+		ReplaceString(modCv, sizeof(modCv), "-l", "");
+		TrimString(modCv);
+
+		if (modCv[0] == EOS) {
+			Format(modCv, sizeof(modCv), oldCv);
+		}
+
+		g_Cvars.SetString(name, modCv, true);
+		UpdateConVarsHook(convar, modCv, modCv);
+		return;
+	}
+
+	else if (StrContains(newCv, "-u") == 0) {
+		ReplaceString(modCv, sizeof(modCv), "-u", "");
+		TrimString(modCv);
+
+		if (modCv[0] == EOS) {
+			Format(modCv, sizeof(modCv), oldCv);
+		}
+
+		g_Cvars.Remove(name);
+		UpdateConVarsHook(convar, modCv, modCv);
+		return;
+	}
+
+	else if (g_Cvars.GetString(name, modCv, sizeof(modCv))) {
+		if (!StrEqual(modCv, newCv)) {
+			UpdateConVarsHook(convar, modCv, modCv);
+			return;
+		}
+	}
+
+	if (StrEqual(name, "abm_loglevel")) {
+		SetConVarString(g_cvLogLevel, newCv);
+		g_LogLevel = GetConVarInt(g_cvLogLevel);
+	}
+
+	else if (StrEqual(name, "abm_extraplayers")) {
+		SetConVarString(g_cvExtraPlayers, newCv);
+		g_ExtraPlayers = GetConVarInt(g_cvExtraPlayers);
+	}
+
+	else if (StrEqual(name, "abm_tankchunkhp")) {
+		SetConVarString(g_cvTankChunkHp, newCv);
+		g_TankChunkHp = GetConVarInt(g_cvTankChunkHp);
+	}
+
+	else if (StrEqual(name, "abm_spawninterval")) {
+		SetConVarString(g_cvSpawnInterval, newCv);
+		g_SpawnInterval = GetConVarInt(g_cvSpawnInterval);
+	}
+
+	else if (StrEqual(name, "abm_primaryweapon")) {
+		SetConVarString(g_cvPrimaryWeapon, newCv);
+		GetConVarString(g_cvPrimaryWeapon, g_PrimaryWeapon, sizeof(g_PrimaryWeapon));
+	}
+
+	else if (StrEqual(name, "abm_secondaryweapon")) {
+		SetConVarString(g_cvSecondaryWeapon, newCv);
+		GetConVarString(g_cvSecondaryWeapon, g_SecondaryWeapon, sizeof(g_SecondaryWeapon));
+	}
+
+	else if (StrEqual(name, "abm_throwable")) {
+		SetConVarString(g_cvThrowable, newCv);
+		GetConVarString(g_cvThrowable, g_Throwable, sizeof(g_Throwable));
+	}
+
+	else if (StrEqual(name, "abm_healitem")) {
+		SetConVarString(g_cvHealItem, newCv);
+		GetConVarString(g_cvHealItem, g_HealItem, sizeof(g_HealItem));
+	}
+
+	else if (StrEqual(name, "abm_consumable")) {
+		SetConVarString(g_cvConsumable, newCv);
+		GetConVarString(g_cvConsumable, g_Consumable, sizeof(g_Consumable));
+	}
+
+	else if (StrEqual(name, "abm_minplayers")) {
+		SetConVarString(g_cvMinPlayers, newCv);
+		g_MinPlayers = GetConVarInt(g_cvMinPlayers);
+		CreateTimer(0.1, RmBotsTimer, g_MinPlayers * -1);
+	}
 
 	switch(g_OS) {  // Zoey hates Windows :'(
 		case 0: g_Zoey = 5;
@@ -394,7 +519,7 @@ public OnClientPostAdminCheck(int client) {
 	if (!GetQRecord(client)) {
 		if (SetQRecord(client) >= 0) {
 			g_cisi[client] = g_QKey;
-			PrintToServer("AUTH ID: %s, ADDED TO QDB.", g_QKey);
+			Echo(0, "AUTH ID: %s, ADDED TO QDB.", g_QKey);
 
 			if (CountTeamMates(2) >= 1) {
 				CreateTimer(0.1, TakeOverTimer, client);
@@ -410,14 +535,30 @@ public GoIdleHook(Handle event, const char[] name, bool dontBroadcast) {
 	GoIdle(client);
 }
 
-GoIdle(int client) {
+GoIdle(int client, onteam=0) {
 	Echo(1, "GoIdle: %d", client);
 
 	if (GetQRecord(client)) {
-		if (GetClientTeam(client) == 2) {
+		if (g_onteam == 2) {
 			SwitchToSpec(client);
 			SetHumanSpecSig(g_target, client);
+
+			if (onteam == 1) {
+				SwitchToSpec(client);
+			}
+
+			if (IsClientValid(client)) {
+				if (IsValidEntity(client) && IsValidEntity(g_target)) {
+					SetEntPropEnt(client, Prop_Send, "m_hObserverTarget", g_target);
+					SetEntPropEnt(client, Prop_Send, "m_iObserverMode", 5);
+				}
+			}
+
 			AssignModel(g_target, g_model);
+		}
+
+		else {
+			SwitchToSpec(client);
 		}
 	}
 }
@@ -438,8 +579,10 @@ RemoveQDBKey(int client) {
 
 	if (g_QDB.Remove(g_sB)) {
 		g_cisi[client] = "";
-		PrintToServer("AUTH ID: %s, REMOVED FROM QDB.", g_sB);
-		if (CountTeamMates(2) > g_MinPlayers) {
+		Echo(0, "AUTH ID: %s, REMOVED FROM QDB.", g_sB);
+
+		int survivors = CountTeamMates(2);
+		if (survivors > (g_MinPlayers + g_ExtraPlayers)) {
 			CreateTimer(1.0, RmBotsTimer, 1);
 		}
 	}
@@ -637,13 +780,17 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 	if (!g_IsVs && onteam == 3) {
 		for (int i = 1 ; i <= MaxClients ; i++) {
 			if (GetQRecord(i) && g_queued && g_onteam == 3) {
-				g_QRecord.SetValue("queued", false, true);
 				SwitchToBot(i, client);
 			}
 		}
 	}
 
 	if (onteam == 2) {
+		// does this even work... test this thoroughly please
+		if (GetQRecord(GetClientManager(client))) {
+			AssignModel(client, g_model);
+		}
+
 		CreateTimer(0.1, AutoModelTimer, client);
 	}
 }
@@ -690,6 +837,7 @@ public QTeamHook(Handle event, const char[] name, bool dontBroadcast) {
 
 			if (onteam == 3) {
 				g_QRecord.SetString("model", "", true);
+				return;
 			}
 		}
 
@@ -771,8 +919,12 @@ public QBakHook(Handle event, const char[] name, bool dontBroadcast) {
 StripClient(int client) {
 	Echo(1, "StripClient: %d", client);
 
-	for (int i = 0 ; i < 5 ; i++) {
-		StripClientSlot(client, i);
+	if (IsClientValid(client)) {
+		if (GetClientTeam(client) == 2) {
+			for (int i = 4 ; i >= 0 ; i--) {
+				StripClientSlot(client, i);
+			}
+		}
 	}
 }
 
@@ -782,10 +934,12 @@ StripClientSlot(int client, int slot) {
 	client = GetPlayClient(client);
 
 	if (IsClientValid(client)) {
-		int ent = GetPlayerWeaponSlot(client, slot);
-		if (IsValidEntity(ent)) {
-			RemovePlayerItem(client, ent);
-			RemoveEdict(ent);
+		if (GetClientTeam(client) == 2) {
+			int ent = GetPlayerWeaponSlot(client, slot);
+			if (IsValidEntity(ent)) {
+				RemovePlayerItem(client, ent);
+				RemoveEdict(ent);
+			}
 		}
 	}
 }
@@ -941,6 +1095,10 @@ SwitchToSpec(int client, int onteam=1) {
 	if (GetQRecord(client)) {
 		g_QRecord.SetValue("inspec", true, true);
 		ChangeClientTeam(client, onteam);
+
+		if (client != g_target) {
+			SetEntProp(g_target, Prop_Send, "m_humanSpectatorUserID", 0);
+		}
 	}
 }
 
@@ -999,8 +1157,7 @@ public Action SwitchToBotTimer(Handle timer, Handle pack) {
 			}
 
 			case 3: {
-				TakeOverZombieBotSig(client, bot);
-				if (si_ghost) {
+				if (TakeOverZombieBotSig(client, bot) && si_ghost) {
 					State_TransitionSig(client, 8);
 				}
 			}
@@ -1015,9 +1172,8 @@ TakeOver(int client, int onteam) {
 
 	if (GetQRecord(client)) {
 		StringMap R = g_QRecord;
-		SwitchToSpec(client);
 
-		if (IsClientValid(g_target)) {
+		if (IsClientValid(g_target) && IsFakeClient(g_target)) {
 			if (client != g_target && GetClientTeam(g_target) == onteam) {
 				SwitchToBot(client, g_target);
 				return;
@@ -1039,8 +1195,6 @@ TakeOver(int client, int onteam) {
 			case 2: AddSurvivor();
 			case 3: AddInfected();
 		}
-
-		CreateTimer(2.0, TakeOverTimer, client);
 	}
 }
 
@@ -1056,7 +1210,6 @@ public Action TakeOverTimer(Handle timer, any client) {
 	static teamX;
 
 	if (GetQRecord(client)) {
-
 		if (GetClientTeam(client) >= 2) {
 			return Plugin_Handled;
 		}
@@ -1139,7 +1292,9 @@ int GetClientManager(int target) {
 				client = GetClientOfUserId(userid);
 
 				if (GetQRecord(client) && i != g_target) {
-					SetEntProp(i, Prop_Send, "m_humanSpectatorUserID", 0);
+					if (HasEntProp(i, Prop_Send, "m_humanSpectatorUserID")) {
+						SetEntProp(i, Prop_Send, "m_humanSpectatorUserID", 0);
+					}
 				}
 			}
 		}
@@ -1161,7 +1316,7 @@ int GetClientManager(int target) {
 	return result;  // target IS valid and NOT managed
 }
 
-int GetNextBot(int onteam, int skipIndex=1) {
+int GetNextBot(int onteam, int skipIndex=0) {
 	Echo(1, "GetNextBot: %d %d", onteam, skipIndex);
 
 	int bot;
@@ -1169,14 +1324,16 @@ int GetNextBot(int onteam, int skipIndex=1) {
 	for (int i = 1 ; i <= MaxClients ; i++) {
 		if (GetClientManager(i) == 0) {
 			if (GetClientTeam(i) == onteam) {
-				if (bot == 0) {
-					bot = i;
+				if (i <= skipIndex) {
+					if (bot == 0) {
+						bot = i;
+					}
+
+					continue;
 				}
 
-				if (i > skipIndex) {
-					bot = i;
-					break;
-				}
+				bot = i;
+				break;
 			}
 		}
 	}
@@ -1202,29 +1359,20 @@ CycleBots(int client, int onteam) {
 SwitchTeam(int client, int onteam) {
 	Echo(1, "SwitchTeam: %d %d", client, onteam);
 
-	if (!GetQRecord(client)) {
-		return;
-	}
+	if (GetQRecord(client)) {
+		switch (onteam) {
+			case 0: GoIdle(client, 0);
+			case 1: GoIdle(client, 1);
+			default: {
+				if (onteam <= 3 && onteam >= 2) {
+					if (g_onteam != onteam) {
+						SwitchToSpec(client);
+					}
 
-	if (g_target != client) {
-		if (GetClientManager(g_target) == client) {
-			SwitchToBot(client, g_target);
-			return;
-		}
-	}
-
-	switch (onteam) {
-		case 0: GoIdle(client);
-		case 1: SwitchToSpec(client, 0);
-		default: {
-			int bot = GetNextBot(onteam);
-
-			if (!IsClientValid(bot)) {
-				TakeOver(client, onteam);
-				return;
+					g_QRecord.SetValue("onteam", onteam, true);
+					TakeOver(client, onteam);
+				}
 			}
-
-			SwitchToBot(client, bot);
 		}
 	}
 }
@@ -1253,24 +1401,34 @@ MkBots(int asmany, int onteam) {
 		asmany = asmany * -1 - CountTeamMates(onteam);
 	}
 
-	for (int i = 1 ; i <= asmany ; i++) {
-		switch (onteam) {
-			case 2: {
-				CreateTimer(0.1, MkBotsTimer, asmany, TIMER_REPEAT);
-				return;
-			}
+	float rate;
+	DataPack pack;
 
-			case 3: AddInfected();
-		}
+	switch (onteam) {
+		case 2: rate = 0.1;
+		case 3: rate = 0.4;
 	}
+
+	CreateDataTimer(rate, MkBotsTimer, pack, TIMER_REPEAT);
+	pack.WriteCell(asmany);
+	pack.WriteCell(onteam);
 }
 
-public Action MkBotsTimer(Handle timer, any asmany) {
-	Echo(1, "MkBotsTimer: %d", asmany);
+public Action MkBotsTimer(Handle timer, Handle pack) {
+	Echo(1, "MkBotsTimer");
+
 	static i;
 
+	ResetPack(pack);
+	int asmany = ReadPackCell(pack);
+	int onteam = ReadPackCell(pack);
+
 	if (i++ < asmany) {
-		AddSurvivor();
+		switch (onteam) {
+			case 2: AddSurvivor();
+			case 3: AddInfected();
+		}
+
 		return Plugin_Continue;
 	}
 
@@ -1397,7 +1555,7 @@ PrecacheModels() {
 		Format(g_sB, sizeof(g_sB), "%s", g_SurvivorPaths[i]);
 		if (!IsModelPrecached(g_sB)) {
 			int retcode = PrecacheModel(g_sB);
-			Echo(1, " - Precaching %s, retcode: %d", g_sB, retcode);
+			Echo(1, " - Precaching Survivor %s, retcode: %d", g_sB, retcode);
 		}
 	}
 }
@@ -1422,13 +1580,17 @@ AssignModel(int client, char [] model) {
 			SetEntityModel(client, g_SurvivorPaths[i]);
 			Format(g_pN, sizeof(g_pN), "%s", g_SurvivorNames[i]);
 
-			if (GetQRecord(client)) {
-				StringMap R = g_QRecord;
-				R.SetString("model", g_pN);
+			if (IsFakeClient(client)) {
+				SetClientInfo(client, "name", g_pN);
+				int boss = GetClientManager(client);
+
+				if (boss > 0) {
+					client = boss;
+				}
 			}
 
-			else {
-				SetClientInfo(client, "name", g_pN);
+			if (GetQRecord(client)) {
+				g_QRecord.SetString("model", g_pN);
 			}
 		}
 	}
@@ -1562,8 +1724,12 @@ void TakeOverBotSig(int client) {
 
 }
 
-void TakeOverZombieBotSig(int client, int bot) {
+bool TakeOverZombieBotSig(int client, int bot) {
 	Echo(1, "TakeOverZombieBotSig: %d %d", client, bot);
+
+	if (!GetQRecord(client)) {
+		return false;
+	}
 
 	static Handle hSwitch;
 	if (hSwitch == null) {
@@ -1574,12 +1740,22 @@ void TakeOverZombieBotSig(int client, int bot) {
 	}
 
 	if (hSwitch != null) {
-		SDKCall(hSwitch, client, bot);
+		if (IsClientInKickQueue(bot)) {
+			KickClient(bot);
+		}
+
+		else if (IsClientValid(bot) && IsFakeClient(bot) && IsPlayerAlive(bot)) {
+			SDKCall(hSwitch, client, bot);
+			return true;
+		}
 	}
 
 	else {
 		SetFailState("[ABM] TakeOverZombieBotSig Signature broken.");
 	}
+
+	g_QRecord.SetValue("queued", true, true);
+	return false;
 }
 
 // ================================================================== //

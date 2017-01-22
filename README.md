@@ -150,14 +150,21 @@ abm_primaryweapon "shotgun_chrome"  5+ survivor primary weapon
 abm_secondaryweapon "baseball_bat"  5+ survivor secondary weapon
 abm_throwable ""                    5+ survivor throwable item
 abm_loglevel "0"                    logging level of the plugin
-abm_zoey "1"						this is auto-detected on Linux
+abm_extraplayers "0"                In addition to abm_minplayers
+abm_tankchunkhp "2500"              Chunk of health per survivor in 5+
+abm_spawninterval "18"              18 X 5 seconds for SI to match survivors
+abm_zoey "1"                        Zoey replacement (auto detected on Linux)
 ```
-
 ### Checking the ABM version
 
 ```
 - abm_version "..." Shows the version running on the server
 ```
+
+### Important Note on Cvars
+It is important to note, changing ABM cvars in your console will get overwritten to the plugins config defaults on a changelevel. Until there is a better way to detect what comes over the console Vs what comes from the config, use the **-l** (lock) option if you'd like your cvar changes to survive a map change. Use the **-u** (unlock) option to return to the default behavior. Examples are "**abm_extraplayers -l 4**" and "**abm_extraplayers -u 2**"
+
+Also it is important to note "find abm" in your console will show you every command and cvar provided by ABM. To distinguish between the two look for an underscore. If there's an underscore it's a cvar, otherwise it is a command.
 
 ## A Little Something Extra
 

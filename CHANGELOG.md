@@ -1,5 +1,25 @@
 # ABM Change Log
 
+## [0.1.23] - 2017-22-01
+### Added
+- The ability to start out with extra survivors
+- An auto difficulty for campaign when teams are larger than size 4
+- You can now lock cvars over the console with an -l option
+- You can now unlock cvars previously locked with a -u option
+
+### Changed
+- Special infected now spawn 0.4 seconds apart from one another
+- Tried simplifying the spectating bug glitch fix
+- GoIdle now takes an argument (0 for idle, 1 for spectator)
+- Extra players are now included in the count before removing "extra" bots
+- Clients are checked to be on team 2 before stripping
+- Joining idle or spectator should now lock onto your survivor correctly
+- Big changes to UpdateConVarsHook, SwitchTeam, MkBots, MkBotsTimer and TakeOverZombieBotSig
+
+### Fixed
+- Joining teams is a lot smoother from either the menu or chat commands
+- Aggressive validation is now done before putting someone into an SI character
+
 ## [0.1.19] - 2017-14-01
 ### Removed
 - Witches no longer spawn with abm-mk (they don't stop spawning though)
