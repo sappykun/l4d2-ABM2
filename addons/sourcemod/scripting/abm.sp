@@ -30,7 +30,7 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.23"
+#define PLUGIN_VERSION "0.1.24"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -86,6 +86,7 @@ char g_GameMode[16];
 bool g_IsVs = false;
 bool g_IsCoop = false;
 bool g_AssistedSpawning = false;
+bool g_RemovedPlayers = false;
 bool g_AddedPlayers = false;
 bool g_ADFreeze = true;
 int g_ADInterval;
@@ -291,6 +292,7 @@ bool StopAD() {
 	if (g_AD != null) {
 		g_ADFreeze = true;
 		g_AssistedSpawning = false;
+		g_RemovedPlayers = false;
 		g_AddedPlayers = false;
 		g_ADInterval = 0;
 
@@ -307,6 +309,7 @@ bool StartAD() {
 	if (g_AD == null) {
 		g_ADFreeze = true;
 		g_AssistedSpawning = false;
+		g_RemovedPlayers = false;
 		g_AddedPlayers = false;
 		g_ADInterval = 0;
 
@@ -333,9 +336,13 @@ public Action ADTimer(Handle timer) {
 		g_ADFreeze = false;
 	}
 
-	// add those extra players
-	if (g_ExtraPlayers > 0 && !g_AddedPlayers) {
-		if (CountTeamMates(2) >= 1) {
+	if (CountTeamMates(2) >= 1 && !g_RemovedPlayers) {
+		RmBots((g_MinPlayers + g_ExtraPlayers) * -1, 2);
+		g_RemovedPlayers = true;
+	}
+
+	if (g_RemovedPlayers) {
+		if (CountTeamMates(2) >= 1 && !g_AddedPlayers) {
 			MkBots((g_MinPlayers + g_ExtraPlayers) * -1, 2);
 			g_AddedPlayers = true;
 		}
@@ -352,14 +359,16 @@ public Action ADTimer(Handle timer) {
 		fullVsSpawn = g_SpawnInterval / 3;
 		halfVsSpawn = fullVsSpawn / 3;
 
-		if (g_IsCoop && teamSize > 4) {  // adjust tank health in coop
+		if (g_IsCoop) {
 			if (tankMp != teamSize) {
 				tankMp = teamSize;
 				SetConVarInt(g_cvTankHealth, teamSize * g_TankChunkHp);
 			}
 
-			if (g_ADInterval % g_SpawnInterval == 0) {
-				MkBots(teamSize * -1, 3);
+			if (teamSize > 4) {
+				if (g_ADInterval % g_SpawnInterval == 0) {
+					MkBots(teamSize * -1, 3);
+				}
 			}
 		}
 
@@ -413,93 +422,67 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
 	Echo(1, "UpdateConVarsHook: %s %s %s", g_sB, oldCv, newCv);
 
 	char name[32];
-	char modCv[32];
+	char value[32];
 
 	Format(name, sizeof(name), g_sB);
-	Format(modCv, sizeof(modCv), "%s", newCv);
+	Format(value, sizeof(value), "%s", newCv);
 
 	if (StrContains(newCv, "-l") == 0) {
-		ReplaceString(modCv, sizeof(modCv), "-l", "");
-		TrimString(modCv);
-
-		if (modCv[0] == EOS) {
-			Format(modCv, sizeof(modCv), oldCv);
-		}
-
-		g_Cvars.SetString(name, modCv, true);
-		UpdateConVarsHook(convar, modCv, modCv);
-		return;
+		ReplaceString(value, sizeof(value), "-l", "");
+		g_Cvars.SetString(name, value, true);
 	}
 
 	else if (StrContains(newCv, "-u") == 0) {
-		ReplaceString(modCv, sizeof(modCv), "-u", "");
-		TrimString(modCv);
-
-		if (modCv[0] == EOS) {
-			Format(modCv, sizeof(modCv), oldCv);
-		}
-
+		ReplaceString(value, sizeof(value), "-u", "");
 		g_Cvars.Remove(name);
-		UpdateConVarsHook(convar, modCv, modCv);
-		return;
 	}
 
-	else if (g_Cvars.GetString(name, modCv, sizeof(modCv))) {
-		if (!StrEqual(modCv, newCv)) {
-			UpdateConVarsHook(convar, modCv, modCv);
-			return;
-		}
+	g_Cvars.GetString(name, value, sizeof(value));
+	TrimString(value);
+	if (value[0] == EOS) {
+		Format(value, sizeof(value), oldCv);
 	}
+
+	SetConVarString(convar, value);
 
 	if (StrEqual(name, "abm_loglevel")) {
-		SetConVarString(g_cvLogLevel, newCv);
 		g_LogLevel = GetConVarInt(g_cvLogLevel);
 	}
 
 	else if (StrEqual(name, "abm_extraplayers")) {
-		SetConVarString(g_cvExtraPlayers, newCv);
 		g_ExtraPlayers = GetConVarInt(g_cvExtraPlayers);
 	}
 
 	else if (StrEqual(name, "abm_tankchunkhp")) {
-		SetConVarString(g_cvTankChunkHp, newCv);
 		g_TankChunkHp = GetConVarInt(g_cvTankChunkHp);
 	}
 
 	else if (StrEqual(name, "abm_spawninterval")) {
-		SetConVarString(g_cvSpawnInterval, newCv);
 		g_SpawnInterval = GetConVarInt(g_cvSpawnInterval);
 	}
 
 	else if (StrEqual(name, "abm_primaryweapon")) {
-		SetConVarString(g_cvPrimaryWeapon, newCv);
 		GetConVarString(g_cvPrimaryWeapon, g_PrimaryWeapon, sizeof(g_PrimaryWeapon));
 	}
 
 	else if (StrEqual(name, "abm_secondaryweapon")) {
-		SetConVarString(g_cvSecondaryWeapon, newCv);
 		GetConVarString(g_cvSecondaryWeapon, g_SecondaryWeapon, sizeof(g_SecondaryWeapon));
 	}
 
 	else if (StrEqual(name, "abm_throwable")) {
-		SetConVarString(g_cvThrowable, newCv);
 		GetConVarString(g_cvThrowable, g_Throwable, sizeof(g_Throwable));
 	}
 
 	else if (StrEqual(name, "abm_healitem")) {
-		SetConVarString(g_cvHealItem, newCv);
 		GetConVarString(g_cvHealItem, g_HealItem, sizeof(g_HealItem));
 	}
 
 	else if (StrEqual(name, "abm_consumable")) {
-		SetConVarString(g_cvConsumable, newCv);
 		GetConVarString(g_cvConsumable, g_Consumable, sizeof(g_Consumable));
 	}
 
 	else if (StrEqual(name, "abm_minplayers")) {
-		SetConVarString(g_cvMinPlayers, newCv);
 		g_MinPlayers = GetConVarInt(g_cvMinPlayers);
-		CreateTimer(0.1, RmBotsTimer, g_MinPlayers * -1);
 	}
 
 	switch(g_OS) {  // Zoey hates Windows :'(
@@ -547,13 +530,8 @@ GoIdle(int client, onteam=0) {
 				SwitchToSpec(client);
 			}
 
-			if (IsClientValid(client)) {
-				if (IsValidEntity(client) && IsValidEntity(g_target)) {
-					SetEntPropEnt(client, Prop_Send, "m_hObserverTarget", g_target);
-					SetEntPropEnt(client, Prop_Send, "m_iObserverMode", 5);
-				}
-			}
-
+			SetEntPropEnt(client, Prop_Send, "m_hObserverTarget", g_target);
+			SetEntPropEnt(client, Prop_Send, "m_iObserverMode", 5);
 			AssignModel(g_target, g_model);
 		}
 
@@ -786,11 +764,6 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 	}
 
 	if (onteam == 2) {
-		// does this even work... test this thoroughly please
-		if (GetQRecord(GetClientManager(client))) {
-			AssignModel(client, g_model);
-		}
-
 		CreateTimer(0.1, AutoModelTimer, client);
 	}
 }

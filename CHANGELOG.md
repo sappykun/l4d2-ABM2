@@ -1,4 +1,14 @@
 # ABM Change Log
+## [0.1.24] - 2017-23-01
+### Added
+- g_RemovedPlayers bool must be fired before g_AddedPlayers is checked
+- After all players are loaded, g_MinPlayers is applied
+- After g_MinPlayers is applied, g_ExtraPlayers is applied
+
+### Changed
+- Tank health is now adjusted regardless of the size of survivors
+- UpdateConVarsHook greatly simplified
+- No more aggressive checks in GoIdle (stack trace still happens, not sure why)
 
 ## [0.1.23] - 2017-22-01
 ### Added
