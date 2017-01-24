@@ -30,10 +30,12 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.24"
+#define PLUGIN_VERSION "0.1.25"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
+ArrayList g_sQueue;
+ArrayList g_iQueue;
 
 int g_OS;  // no one wants to do OS specific stuff but a bug on Windows crashes the server
 
@@ -167,6 +169,8 @@ public OnPluginStart() {
 	g_QDB = new StringMap();
 	g_QRecord = new StringMap();
 	g_Cvars = new StringMap();
+	g_sQueue = new ArrayList(2);
+	g_iQueue = new ArrayList(2);
 
 	for (int i = 1 ; i <= MaxClients ; i++) {
 		g_menuStack[i] = new ArrayStack(128);
@@ -243,17 +247,21 @@ public RoundFreezeEndHook(Handle event, const char[] name, bool dontBroadcast) {
 
 	StopAD();
 	StringMapSnapshot keys = g_QDB.Snapshot();
+	g_iQueue.Clear();
 
 	for (int i ; i < keys.Length ; i++) {
 		keys.GetKey(i, g_sB, sizeof(g_sB));
 		g_QDB.GetValue(g_sB, g_QRecord);
 		g_QRecord.GetValue("onteam", g_onteam);
-		g_QRecord.GetString("model", g_sB, sizeof(g_sB));
-		g_QRecord.SetString("ghost", g_sB, true);
+		g_QRecord.GetValue("client", g_client);
+		g_QRecord.GetString("model", g_model, sizeof(g_model));
+		g_QRecord.SetString("ghost", g_model, true);
 
 		if (g_onteam == 3) {
 			g_QRecord.SetValue("queued", true, true);
 			g_QRecord.SetValue("inspec", true, true);
+			g_iQueue.Push(g_client);
+			SwitchToSpec(g_client);
 		}
 	}
 
@@ -396,6 +404,7 @@ public Action ADTimer(Handle timer) {
 
 					if (GetClientTeam(i) <= 1 && !g_inspec) {
 						g_QRecord.SetValue("queued", true, true);
+						g_iQueue.Push(i);
 					}
 				}
 
@@ -504,6 +513,22 @@ public OnClientPostAdminCheck(int client) {
 			g_cisi[client] = g_QKey;
 			Echo(0, "AUTH ID: %s, ADDED TO QDB.", g_QKey);
 
+			if (IsAdmin(client)) {
+				SwitchToSpec(client);
+				menuArg0 = client;
+				SwitchTeamHandler(client, 1);
+
+				for (int i = 1 ; i <= MaxClients ; i++) {
+					if (IsClientValid(i) && IsClientInGame(i)) {
+						SetEntPropEnt(client, Prop_Send, "m_hObserverTarget", i);
+						SetEntProp(client, Prop_Send, "m_iObserverMode", 5);
+						break;
+					}
+				}
+
+				return;
+			}
+
 			if (CountTeamMates(2) >= 1) {
 				CreateTimer(0.1, TakeOverTimer, client);
 			}
@@ -530,9 +555,11 @@ GoIdle(int client, onteam=0) {
 				SwitchToSpec(client);
 			}
 
-			SetEntPropEnt(client, Prop_Send, "m_hObserverTarget", g_target);
-			SetEntPropEnt(client, Prop_Send, "m_iObserverMode", 5);
-			AssignModel(g_target, g_model);
+			if (IsClientValid(g_target) && IsFakeClient(g_target)) {
+				SetEntPropEnt(client, Prop_Send, "m_hObserverTarget", g_target);
+				SetEntProp(client, Prop_Send, "m_iObserverMode", 5);
+				AssignModel(g_target, g_model);
+			}
 		}
 
 		else {
@@ -744,8 +771,8 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 	Echo(1, "OnSpawnHook: %s", name);
 
 	int userid = GetEventInt(event, "userid");
-	int client = GetClientOfUserId(userid);
-	GetClientName(client, g_pN, sizeof(g_pN));
+	int target = GetClientOfUserId(userid);
+	GetClientName(target, g_pN, sizeof(g_pN));
 
 	int flag1 = StrContains(g_pN, "SPECIAL");
 	int flag2 = StrContains(g_pN, "SURVIVOR");
@@ -753,18 +780,48 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 		return;
 	}
 
-	int onteam = GetClientTeam(client);
+	int client;
+	int onteam = GetClientTeam(target);
 
 	if (!g_IsVs && onteam == 3) {
-		for (int i = 1 ; i <= MaxClients ; i++) {
-			if (GetQRecord(i) && g_queued && g_onteam == 3) {
-				SwitchToBot(i, client);
+		while (g_iQueue.Length > 0) {
+			client = g_iQueue.Get(0);
+
+			if (GetQRecord(client) && g_queued) {
+				SwitchToBot(client, target);
+				g_iQueue.Erase(0);
+				break;
+			}
+
+			if (g_iQueue.Length > 0) {
+				g_iQueue.Erase(0);
 			}
 		}
 	}
 
 	if (onteam == 2) {
-		CreateTimer(0.1, AutoModelTimer, client);
+		CreateTimer(0.1, AutoModelTimer, target);
+		CreateTimer(0.2, OnSpawnHookTimer, target);
+	}
+}
+
+public Action OnSpawnHookTimer(Handle timer, any target) {
+	Echo(1, "OnSpawnHookTimer: %d", target);
+
+	int client;
+
+	while (g_sQueue.Length > 0) {
+		client = g_sQueue.Get(0);
+
+		if (GetQRecord(client) && g_queued) {
+			SwitchToBot(client, target);
+			g_sQueue.Erase(0);
+			break;
+		}
+
+		if (g_sQueue.Length > 0) {
+			g_sQueue.Erase(0);
+		}
 	}
 }
 
@@ -782,6 +839,7 @@ public OnDeathHook(Handle event, const char[] name, bool dontBroadcast) {
 		switch (g_onteam) {
 			case 3: {
 				g_QRecord.SetValue("queued", true, true);
+				g_iQueue.Push(client);
 				SwitchToSpec(client);
 			}
 
@@ -852,7 +910,7 @@ public QAfkHook(Handle event, const char[] name, bool dontBroadcast) {
 	if (targetTeam == 2 && IsClientValid(client)) {
 		if (IsClientInKickQueue(client)) {
 			if (client && target && clientTeam == targetTeam) {
-				int safeClient = GetSafeClient(target);
+				int safeClient = GetSafeSurvivor(target);
 				RespawnClient(target, safeClient);
 			}
 		}
@@ -962,23 +1020,24 @@ TeleportClient(int client, int target) {
 	}
 }
 
-int GetSafeClient(int client) {
-	Echo(1, "GetSafeClient: %d", client);
+int GetSafeSurvivor(int client) {
+	Echo(1, "GetSafeSurvivor: %d", client);
 
-	client = GetPlayClient(client);
-	int onteam = GetClientTeam(client);
+	int last_survivor;
 
 	for (int i = 1 ; i <= MaxClients ; i++) {
 		if (IsClientValid(i) && i != client) {
-			if (IsPlayerAlive(i) && GetClientTeam(i) == onteam) {
-				if (GetEntProp(client, Prop_Send, "m_isHangingFromLedge") == 0) {
+			if (IsPlayerAlive(i) && GetClientTeam(i) == 2) {
+				last_survivor = i;
+
+				if (GetEntProp(i, Prop_Send, "m_isHangingFromLedge") == 0) {
 					return i;
 				}
 			}
 		}
 	}
 
-	return -1;
+	return last_survivor;
 }
 
 bool AddSurvivor() {
@@ -1122,6 +1181,10 @@ public Action SwitchToBotTimer(Handle timer, Handle pack) {
 	onteam = ReadPackCell(pack);
 	si_ghost = ReadPackCell(pack);
 
+	if (!GetQRecord(client)) {
+		return Plugin_Stop;
+	}
+
 	if (IsClientValid(bot)) {
 		switch (onteam) {
 			case 2: {
@@ -1137,6 +1200,10 @@ public Action SwitchToBotTimer(Handle timer, Handle pack) {
 		}
 	}
 
+	if (IsPlayerAlive(client)) {
+		g_QRecord.SetValue("queued", false, true);
+	}
+
 	return Plugin_Stop;
 }
 
@@ -1144,14 +1211,17 @@ TakeOver(int client, int onteam) {
 	Echo(1, "TakeOver: %d %d", client, onteam);
 
 	if (GetQRecord(client)) {
-		StringMap R = g_QRecord;
-
 		if (IsClientValid(g_target) && IsFakeClient(g_target)) {
 			if (client != g_target && GetClientTeam(g_target) == onteam) {
 				SwitchToBot(client, g_target);
 				return;
 			}
 		}
+
+		g_QRecord.SetValue("target", client, true);
+		g_QRecord.SetValue("inspec", false, true);
+		g_QRecord.SetValue("onteam", onteam, true);
+		g_QRecord.SetValue("queued", true, true);
 
 		int nextBot;
 		nextBot = GetNextBot(onteam);
@@ -1161,12 +1231,16 @@ TakeOver(int client, int onteam) {
 			return;
 		}
 
-		R.SetValue("onteam", onteam, true);
-		R.SetValue("queued", true, true);
-
 		switch (onteam) {
-			case 2: AddSurvivor();
-			case 3: AddInfected();
+			case 2: {
+				g_sQueue.Push(client);
+				AddSurvivor();
+			}
+
+			case 3: {
+				g_iQueue.Push(client);
+				AddInfected();
+			}
 		}
 	}
 }
@@ -1481,10 +1555,10 @@ public Action AutoModelTimer(Handle timer, any client) {
 		return Plugin_Handled;
 	}
 
-	int target = GetClientManager(client);
-	if (GetQRecord(target) && g_model[0] != EOS) {
-		return Plugin_Handled;
-	}
+// 	int target = GetClientManager(client);
+// 	if (GetQRecord(target) && g_model[0] != EOS) {
+// 		return Plugin_Handled;
+// 	}
 
 	int smq[8];  // survivor model queue
 	int model;
@@ -1728,6 +1802,7 @@ bool TakeOverZombieBotSig(int client, int bot) {
 	}
 
 	g_QRecord.SetValue("queued", true, true);
+	g_iQueue.Push(client);
 	return false;
 }
 

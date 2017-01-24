@@ -1,4 +1,17 @@
 # ABM Change Log
+## [0.1.25] - 2017-23-01
+### Added
+- g_sQueue and g_iQueue for survivor/infected queue assignments
+- Admins now get a preview of the choose which to team to join on connection
+
+### Fixed
+- Entity errors on m_iObserverMode should be solved
+- Spectating self on !join 1 or spectating others on join now solved
+
+### Changed
+- Client assignments in OnSpawnHook now respect player queues
+- GetSafeClient changed to GetSafeSurvivor to better detail the purpose
+
 ## [0.1.24] - 2017-23-01
 ### Added
 - g_RemovedPlayers bool must be fired before g_AddedPlayers is checked
