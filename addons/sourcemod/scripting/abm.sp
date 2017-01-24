@@ -30,7 +30,7 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.25"
+#define PLUGIN_VERSION "0.1.26"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -258,10 +258,10 @@ public RoundFreezeEndHook(Handle event, const char[] name, bool dontBroadcast) {
 		g_QRecord.SetString("ghost", g_model, true);
 
 		if (g_onteam == 3) {
-			g_QRecord.SetValue("queued", true, true);
-			g_QRecord.SetValue("inspec", true, true);
-			g_iQueue.Push(g_client);
 			SwitchToSpec(g_client);
+			g_QRecord.SetValue("queued", true, true);
+			g_QRecord.SetValue("inspec", false, true);
+			g_iQueue.Push(g_client);
 		}
 	}
 
@@ -1555,10 +1555,10 @@ public Action AutoModelTimer(Handle timer, any client) {
 		return Plugin_Handled;
 	}
 
-// 	int target = GetClientManager(client);
-// 	if (GetQRecord(target) && g_model[0] != EOS) {
-// 		return Plugin_Handled;
-// 	}
+	int target = GetClientManager(client);
+	if (GetQRecord(target) && g_model[0] != EOS) {
+		return Plugin_Handled;
+	}
 
 	int smq[8];  // survivor model queue
 	int model;
@@ -2465,6 +2465,7 @@ TeamsMenu(int client, char [] title, bool all=true) {
 
 	Menu menu = new Menu(GenericMenuHandler);
 	menu.SetTitle(title);
+
 	if (all) {
 		menu.AddItem("0", "Idler");
 		menu.AddItem("1", "Spectator");

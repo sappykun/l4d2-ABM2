@@ -1,7 +1,13 @@
 # ABM Change Log
+
+## [0.1.26] - 2017-24-01
+### Fixed
+- Regression: SI in campaign unqueued after next map start
+- Regression: Losing survivor model in some situations
+
 ## [0.1.25] - 2017-23-01
 ### Added
-- g_sQueue and g_iQueue for survivor/infected queue assignments
+- g_sQueue and g_iQueue for survivor/infected queuing assignments
 - Admins now get a preview of the choose which to team to join on connection
 
 ### Fixed
@@ -10,7 +16,7 @@
 
 ### Changed
 - Client assignments in OnSpawnHook now respect player queues
-- GetSafeClient changed to GetSafeSurvivor to better detail the purpose
+- GetSafeClient changed to GetSafeSurvivor to better detail its purpose
 
 ## [0.1.24] - 2017-23-01
 ### Added
