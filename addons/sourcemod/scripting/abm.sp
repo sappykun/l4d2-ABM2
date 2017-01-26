@@ -30,7 +30,7 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.27"
+#define PLUGIN_VERSION "0.1.28"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -119,7 +119,7 @@ int g_SpawnInterval;
 
 public Plugin myinfo= {
 	name = "ABM",
-	author = "Victor B. Gonzalez",
+	author = "Victor BUCKWANGS Gonzalez",
 	description = "A 5+ Player Enhancement Plugin for L4D2",
 	version = PLUGIN_VERSION,
 	url = "https://gitlab.com/vbgunz/ABM"
@@ -1736,7 +1736,7 @@ int GetModelIndexByName(char [] name, int onteam=2) {
 
 	if (onteam == 2) {
 		for (int i ; i < sizeof(g_SurvivorNames) ; i ++) {
-			if (StrContains(g_SurvivorNames[i], name, false) != -1) {
+			if (StrContains(name, g_SurvivorNames[i], false) != -1) {
 				return i;
 			}
 		}
@@ -1960,7 +1960,7 @@ public Action SwitchTeamCmd(int client, args) {
 		menuArg1 = StringToInt(g_sB);
 	}
 
-	else {
+	else if (args >= 2) {
 		GetCmdArg(1, g_sB, sizeof(g_sB));
 		menuArg0 = StringToInt(g_sB);
 		GetCmdArg(2, g_sB, sizeof(g_sB));
@@ -1976,7 +1976,7 @@ public Action SwitchTeamCmd(int client, args) {
 		level = 1;
 	}
 
-	if (result == 0 && GetQRecord(menuArg0)) {
+	if (menuArg1 == 3 && GetQRecord(menuArg0)) {
 		g_QRecord.SetString("model", model);
 	}
 

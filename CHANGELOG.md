@@ -1,6 +1,9 @@
 # ABM Change Log
+## [0.1.28] - 2017-26-01
+### Fixed
+- Switch client team menu
 
-## [0.1.27] - 2017-25-01
+## [0.1.27] - 2017-26-01
 ### Added
 - The ability to spawn specific SI is in place (but not fully implemented)
 - CleanSIName function will sanitize or remove invalid SI names
