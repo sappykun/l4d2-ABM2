@@ -1,5 +1,15 @@
 # ABM Change Log
 
+## [0.1.27] - 2017-25-01
+### Added
+- The ability to spawn specific SI is in place (but not fully implemented)
+- CleanSIName function will sanitize or remove invalid SI names
+
+### Changed
+- g_SpecialNames to g_InfectedNames for clarity
+- Switching to spectator should snap you onto your survivor or another survivor
+- Switching to SI should always give you a ghost (even if a script restricts it)
+
 ## [0.1.26] - 2017-24-01
 ### Fixed
 - Regression: SI in campaign unqueued after next map start

@@ -30,7 +30,7 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.26"
+#define PLUGIN_VERSION "0.1.27"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -55,8 +55,7 @@ StringMap g_QDB;      // holds player records linked by STEAM_ID
 StringMap g_QRecord;  // changes to an individual STEAM_ID mapping
 StringMap g_Cvars;
 
-//char g_SpecialNames[8][] = {"Tank", "Boomer", "Smoker", "Witch", "Hunter", "Spitter", "Jockey", "Charger"};
-char g_SpecialNames[6][] = {"Boomer", "Smoker", "Hunter", "Spitter", "Jockey", "Charger"};
+char g_InfectedNames[8][] = {"Tank", "Boomer", "Smoker", "Witch", "Hunter", "Spitter", "Jockey", "Charger"};
 char g_SurvivorNames[8][] = {"Nick", "Rochelle", "Coach", "Ellis", "Bill", "Zoey", "Francis", "Louis"};
 char g_SurvivorPaths[8][] = {
 	"models/survivors/survivor_gambler.mdl",
@@ -514,18 +513,9 @@ public OnClientPostAdminCheck(int client) {
 			Echo(0, "AUTH ID: %s, ADDED TO QDB.", g_QKey);
 
 			if (IsAdmin(client)) {
-				SwitchToSpec(client);
+				GoIdle(client, 1);
 				menuArg0 = client;
 				SwitchTeamHandler(client, 1);
-
-				for (int i = 1 ; i <= MaxClients ; i++) {
-					if (IsClientValid(i) && IsClientInGame(i)) {
-						SetEntPropEnt(client, Prop_Send, "m_hObserverTarget", i);
-						SetEntProp(client, Prop_Send, "m_iObserverMode", 5);
-						break;
-					}
-				}
-
 				return;
 			}
 
@@ -547,6 +537,9 @@ GoIdle(int client, onteam=0) {
 	Echo(1, "GoIdle: %d", client);
 
 	if (GetQRecord(client)) {
+
+		int spec_target;
+
 		if (g_onteam == 2) {
 			SwitchToSpec(client);
 			SetHumanSpecSig(g_target, client);
@@ -555,15 +548,21 @@ GoIdle(int client, onteam=0) {
 				SwitchToSpec(client);
 			}
 
-			if (IsClientValid(g_target) && IsFakeClient(g_target)) {
-				SetEntPropEnt(client, Prop_Send, "m_hObserverTarget", g_target);
-				SetEntProp(client, Prop_Send, "m_iObserverMode", 5);
-				AssignModel(g_target, g_model);
-			}
+			AssignModel(g_target, g_model);
 		}
 
 		else {
 			SwitchToSpec(client);
+		}
+
+		switch (IsClientValid(g_target) && IsFakeClient(g_target)) {
+			case 1: spec_target = g_target;
+			case 0: spec_target = GetSafeSurvivor(client);
+		}
+
+		if (IsClientValid(spec_target)) {
+			SetEntPropEnt(client, Prop_Send, "m_hObserverTarget", spec_target);
+			SetEntProp(client, Prop_Send, "m_iObserverMode", 5);
 		}
 	}
 }
@@ -838,9 +837,12 @@ public OnDeathHook(Handle event, const char[] name, bool dontBroadcast) {
 
 		switch (g_onteam) {
 			case 3: {
-				g_QRecord.SetValue("queued", true, true);
-				g_iQueue.Push(client);
-				SwitchToSpec(client);
+				if (!g_IsVs) {
+					SwitchTeam(client, 3);
+					//g_QRecord.SetValue("queued", true, true);
+					//g_iQueue.Push(client);
+					//SwitchToSpec(client);
+				}
 			}
 
 			case 2: {
@@ -1095,25 +1097,75 @@ GhostsModeProtector(int state) {
 	}
 }
 
-bool AddInfected() {
+CleanSIName(char model[32], bool randomize=true) {
+	int i = GetModelIndexByName(model, 3);
+
+	switch (model[0] != EOS && i >= 0) {
+		case 1: {
+			model = g_InfectedNames[i];
+		}
+
+		default: {
+			if (randomize) {
+				while (i <= 0 || i == 3) {  // no tank 0 or witch 3
+					i = GetRandomInt(0, sizeof(g_InfectedNames) - 1);
+				}
+
+				model = g_InfectedNames[i];
+			}
+
+			else {
+				model = "";
+			}
+		}
+	}
+}
+
+bool AddInfected(int version=0, char model[32]="") {
 	Echo(1, "AddInfected");
 
+	// GetEntProp(i, Prop_Send, "m_ghostSpawnState");
+	// considering above in spawning all with z_spawn
+
 	bool result = false;
-	int index;
-	char si[32];
+	char cmd[12];
+	float i[3];
 
-	index = GetRandomInt(0, sizeof(g_SpecialNames) - 1);
-	si = g_SpecialNames[index];
-
+	CleanSIName(model);
 	int special = CreateFakeClient("SPECIAL");
+
 	if (IsClientValid(special)) {
+
+		switch (version) {
+			case 0: cmd = "z_spawn_old";
+			case 1: cmd = "z_spawn";
+		}
+
 		ChangeClientTeam(special, 3);
-		Format(g_sB, sizeof(g_sB), "%s auto", si);
+		Format(g_sB, sizeof(g_sB), "%s auto area", model);
+
+// 		if (!StrEqual(cmd, "z_spawn")) {
+// 			for (int j = 1 ; j <= MaxClients ; j++) {
+// 				if (IsClientValid(j) && GetClientTeam(j) == 3 && !IsFakeClient(j)) {
+// 					if (GetEntProp(j, Prop_Send, "m_ghostSpawnState") <= 2) {
+// 						GetClientAbsOrigin(j, i);
+// 						cmd = "z_spawn";
+// 						break;
+// 					}
+// 				}
+// 			}
+// 		}
 
 		GhostsModeProtector(0);
-		QuickCheat(special, "z_spawn_old", g_sB);
+		QuickCheat(special, cmd, g_sB);
 		KickClient(special);
 		GhostsModeProtector(1);
+
+		// use z_spawn for humans that request SI
+		// for all others, always use z_spawn_old
+		if (StrEqual(cmd, "z_spawn")) {
+			TeleportEntity(special, i, i, i);
+		}
 
 		result = true;
 	}
@@ -1150,7 +1202,7 @@ SwitchToBot(int client, int bot, bool si_ghost=true) {
 		int onteam = GetClientTeam(bot);
 
 		if (GetQRecord(client)) {
-			SwitchToSpec(client);
+			GoIdle(client, 1);
 			SwitchToBotMiddleManWTF(client, bot, onteam, si_ghost);
 		}
 	}
@@ -1403,7 +1455,7 @@ CycleBots(int client, int onteam) {
 	}
 }
 
-SwitchTeam(int client, int onteam) {
+SwitchTeam(int client, int onteam, char model[32]="") {
 	Echo(1, "SwitchTeam: %d %d", client, onteam);
 
 	if (GetQRecord(client)) {
@@ -1413,10 +1465,27 @@ SwitchTeam(int client, int onteam) {
 			default: {
 				if (onteam <= 3 && onteam >= 2) {
 					if (g_onteam != onteam) {
-						SwitchToSpec(client);
+						GoIdle(client, 1);
 					}
 
+					g_QRecord.SetValue("queued", true, true);
 					g_QRecord.SetValue("onteam", onteam, true);
+
+					if (onteam == 3) {
+						switch (g_model[0] == EOS && model[0] != EOS) {
+							case 1: CleanSIName(model);
+							case 0: {
+								Format(model, sizeof(model), "%s", g_model);
+								CleanSIName(model);
+							}
+						}
+
+						g_QRecord.SetString("model", model, true);
+						g_iQueue.Push(client);
+						AddInfected(1, model);
+						return;
+					}
+
 					TakeOver(client, onteam);
 				}
 			}
@@ -1662,12 +1731,22 @@ int GetClientModelIndex(int client) {
 	return -1;
 }
 
-int GetModelIndexByName(char [] name) {
+int GetModelIndexByName(char [] name, int onteam=2) {
 	Echo(1, "GetModelIndexByName: %s", name);
 
-	for (int i = 0 ; i < sizeof(g_SurvivorNames) ; i ++) {
-		if (StrContains(name, g_SurvivorNames[i], false) != -1) {
-			return i;
+	if (onteam == 2) {
+		for (int i ; i < sizeof(g_SurvivorNames) ; i ++) {
+			if (StrContains(g_SurvivorNames[i], name, false) != -1) {
+				return i;
+			}
+		}
+	}
+
+	else if (onteam == 3) {
+		for (int i ; i < sizeof(g_InfectedNames) ; i ++) {
+			if (StrContains(g_InfectedNames[i], name, false) != -1) {
+				return i;
+			}
 		}
 	}
 
@@ -1871,19 +1950,21 @@ public Action SwitchTeamCmd(int client, args) {
 
 	int level;
 
-	switch(args) {
-		case 1: {
-			menuArg0 = client;
-			GetCmdArg(1, g_sB, sizeof(g_sB));
-			menuArg1 = StringToInt(g_sB);
-		}
+	char model[32];
+	GetCmdArg(args, model, sizeof(model));
+	int result = StringToInt(model);
 
-		case 2: {
-			GetCmdArg(1, g_sB, sizeof(g_sB));
-			menuArg0 = StringToInt(g_sB);
-			GetCmdArg(2, g_sB, sizeof(g_sB));
-			menuArg1 = StringToInt(g_sB);
-		}
+	if (args == 1 || args == 2 && result == 0) {
+		menuArg0 = client;
+		GetCmdArg(1, g_sB, sizeof(g_sB));
+		menuArg1 = StringToInt(g_sB);
+	}
+
+	else {
+		GetCmdArg(1, g_sB, sizeof(g_sB));
+		menuArg0 = StringToInt(g_sB);
+		GetCmdArg(2, g_sB, sizeof(g_sB));
+		menuArg1 = StringToInt(g_sB);
 	}
 
 	if (args) {
@@ -1893,6 +1974,10 @@ public Action SwitchTeamCmd(int client, args) {
 	else if (!IsAdmin(client)) {
 		menuArg0 = client;
 		level = 1;
+	}
+
+	if (result == 0 && GetQRecord(menuArg0)) {
+		g_QRecord.SetString("model", model);
 	}
 
 	SwitchTeamHandler(client, level);
