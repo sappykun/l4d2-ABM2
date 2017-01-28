@@ -30,7 +30,7 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.28"
+#define PLUGIN_VERSION "0.1.29"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -141,12 +141,14 @@ public OnPluginStart() {
 	HookEvent("player_bot_replace", QAfkHook);
 	HookEvent("bot_player_replace", QBakHook);
 
-	HookEvent("player_activate", PlayerActivateHook);
+	HookEvent("player_activate", PlayerActivateHook, EventHookMode_Pre);
+	HookEvent("player_connect", PlayerActivateHook, EventHookMode_Pre);
+
 	HookEvent("round_end", RoundFreezeEndHook, EventHookMode_Pre);
 	HookEvent("mission_lost", RoundFreezeEndHook, EventHookMode_Pre);
 	HookEvent("round_freeze_end", RoundFreezeEndHook, EventHookMode_Pre);
 	HookEvent("map_transition", RoundFreezeEndHook, EventHookMode_Pre);
-	HookEvent("round_start", RoundStartHook, EventHookMode_Post);
+	HookEvent("round_start", RoundStartHook, EventHookMode_Pre);
 
 	RegAdminCmd("abm", MainMenuCmd, ADMFLAG_GENERIC);
 	RegAdminCmd("abm-menu", MainMenuCmd, ADMFLAG_GENERIC);
@@ -260,7 +262,6 @@ public RoundFreezeEndHook(Handle event, const char[] name, bool dontBroadcast) {
 			SwitchToSpec(g_client);
 			g_QRecord.SetValue("queued", true, true);
 			g_QRecord.SetValue("inspec", false, true);
-			g_iQueue.Push(g_client);
 		}
 	}
 
@@ -282,8 +283,10 @@ PlayerActivate(int client) {
 		StartAD();
 		AssignModel(client, g_ghost);
 
-		if (g_onteam == 3) {
-			TakeOver(client, 3);
+		if (!g_IsVs) {
+			if (g_onteam == 3 && g_queued) {
+				SwitchTeam(client, 3);
+			}
 		}
 	}
 }
@@ -291,6 +294,14 @@ PlayerActivate(int client) {
 public RoundStartHook(Handle event, const char[] name, bool dontBroadcast) {
 	Echo(1, "RoundStartHook: %s", name);
 	StartAD();
+
+	for (int i = 1 ; i <= MaxClients ; i++) {
+		if (GetQRecord(i)) {
+			if (g_onteam == 3 && g_queued) {
+				SwitchTeam(i, 3);
+			}
+		}
+	}
 }
 
 bool StopAD() {
@@ -333,9 +344,21 @@ public Action ADTimer(Handle timer) {
 
 	if (g_ADFreeze) {
 		for (int i = 1 ; i <= MaxClients ; i++) {
-			if (IsClientConnected(i) && !IsClientInGame(i)) {
-				Echo(1, " -- ADTimer: Client %d isn't loaded in yet.", i);
-				return Plugin_Continue;
+			if (IsClientConnected(i)) {
+				if (!IsClientInGame(i)) {
+					Echo(1, " -- ADTimer: Client %d isn't loaded in yet.", i);
+					return Plugin_Continue;
+				}
+
+				else {
+					if (!g_IsVs) {
+						if (GetQRecord(i)) {
+							if (g_onteam == 3 && g_queued) {
+								SwitchTeam(i, 3);
+							}
+						}
+					}
+				}
 			}
 		}
 
@@ -357,19 +380,30 @@ public Action ADTimer(Handle timer) {
 
 	g_ADInterval++;
 	int teamSize = CountTeamMates(2);
+
+	if (teamSize == 0) {
+		g_ADInterval = 0;
+		return Plugin_Continue;
+	}
+
+	int tankHealth;
 	static tankMp;
 	static fullVsSpawn;
 	static halfVsSpawn;
 
 	if (!g_IsVs) {
 
-		fullVsSpawn = g_SpawnInterval / 3;
-		halfVsSpawn = fullVsSpawn / 3;
+		fullVsSpawn = g_SpawnInterval / 2;
+		halfVsSpawn = fullVsSpawn / 2;
 
 		if (g_IsCoop) {
 			if (tankMp != teamSize) {
 				tankMp = teamSize;
-				SetConVarInt(g_cvTankHealth, teamSize * g_TankChunkHp);
+				tankHealth = teamSize * g_TankChunkHp;
+
+				if (tankHealth > 0) {
+					SetConVarInt(g_cvTankHealth, tankHealth);
+				}
 			}
 
 			if (teamSize > 4) {
@@ -379,15 +413,17 @@ public Action ADTimer(Handle timer) {
 			}
 		}
 
-		if (g_AssistedSpawning) {
-			if (g_ADInterval % fullVsSpawn == 0) {
-				Echo(1, " -- Assisting SI: Matching Full Team");
-				MkBots(teamSize * -1, 3);
-			}
+		if (g_ADInterval >= g_SpawnInterval) {
+			if (g_AssistedSpawning) {
+				if (g_ADInterval % fullVsSpawn == 0) {
+					Echo(1, " -- Assisting SI: Matching Full Team");
+					MkBots(teamSize * -1, 3);
+				}
 
-			else if (g_ADInterval % halfVsSpawn == 0) {
-				Echo(1, " -- Assisting SI: Matching Half Team");
-				MkBots((teamSize / 2) * -1, 3);
+				else if (g_ADInterval % halfVsSpawn == 0) {
+					Echo(1, " -- Assisting SI: Matching Half Team");
+					MkBots((teamSize / 2) * -1, 3);
+				}
 			}
 		}
 	}
@@ -781,20 +817,22 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 
 	int client;
 	int onteam = GetClientTeam(target);
+	int i;
 
 	if (!g_IsVs && onteam == 3) {
-		while (g_iQueue.Length > 0) {
-			client = g_iQueue.Get(0);
+		while (i < g_iQueue.Length) {
+			client = g_iQueue.Get(i);
 
-			if (GetQRecord(client) && g_queued) {
+			if (GetQRecord(client)) {
 				SwitchToBot(client, target);
-				g_iQueue.Erase(0);
-				break;
+
+				if (g_iQueue.Length > i) {
+					g_iQueue.Erase(i);
+					break;
+				}
 			}
 
-			if (g_iQueue.Length > 0) {
-				g_iQueue.Erase(0);
-			}
+			i++;
 		}
 	}
 
@@ -808,19 +846,21 @@ public Action OnSpawnHookTimer(Handle timer, any target) {
 	Echo(1, "OnSpawnHookTimer: %d", target);
 
 	int client;
+	int i;
 
-	while (g_sQueue.Length > 0) {
-		client = g_sQueue.Get(0);
+	while (i < g_sQueue.Length) {
+		client = g_sQueue.Get(i);
 
-		if (GetQRecord(client) && g_queued) {
+		if (GetQRecord(client)) {
 			SwitchToBot(client, target);
-			g_sQueue.Erase(0);
-			break;
+
+			if (g_sQueue.Length > i) {
+				g_sQueue.Erase(i);
+				break;
+			}
 		}
 
-		if (g_sQueue.Length > 0) {
-			g_sQueue.Erase(0);
-		}
+		i++;
 	}
 }
 
@@ -839,9 +879,6 @@ public OnDeathHook(Handle event, const char[] name, bool dontBroadcast) {
 			case 3: {
 				if (!g_IsVs) {
 					SwitchTeam(client, 3);
-					//g_QRecord.SetValue("queued", true, true);
-					//g_iQueue.Push(client);
-					//SwitchToSpec(client);
 				}
 			}
 
@@ -1245,8 +1282,10 @@ public Action SwitchToBotTimer(Handle timer, Handle pack) {
 			}
 
 			case 3: {
-				if (TakeOverZombieBotSig(client, bot) && si_ghost) {
-					State_TransitionSig(client, 8);
+				if (TakeOverZombieBotSig(client, bot)) {
+					if (si_ghost) {
+						State_TransitionSig(client, 8);
+					}
 				}
 			}
 		}
@@ -1521,7 +1560,7 @@ MkBots(int asmany, int onteam) {
 	DataPack pack;
 
 	switch (onteam) {
-		case 2: rate = 0.1;
+		case 2: rate = 0.2;
 		case 3: rate = 0.4;
 	}
 
@@ -1785,6 +1824,7 @@ void RoundRespawnSig(int client) {
 	}
 
 	else {
+		PrintToChat(client, "[ABM] RoundRespawnSig Signature broken.");
 		SetFailState("[ABM] RoundRespawnSig Signature broken.");
 	}
 }
@@ -1805,6 +1845,7 @@ void SetHumanSpecSig(int bot, int client) {
 	}
 
 	else {
+		PrintToChat(client, "[ABM] SetHumanSpecSig Signature broken.");
 		SetFailState("[ABM] SetHumanSpecSig Signature broken.");
 	}
 }
@@ -1825,6 +1866,7 @@ void State_TransitionSig(int client, int mode) {
 	}
 
 	else {
+		PrintToChat(client, "[ABM] State_TransitionSig Signature broken.");
 		SetFailState("[ABM] State_TransitionSig Signature broken.");
 	}
 }
@@ -1845,6 +1887,7 @@ void TakeOverBotSig(int client) {
 	}
 
 	else {
+		PrintToChat(client, "[ABM] TakeOverBotSig Signature broken.");
 		SetFailState("[ABM] TakeOverBotSig Signature broken.");
 	}
 
@@ -1877,6 +1920,7 @@ bool TakeOverZombieBotSig(int client, int bot) {
 	}
 
 	else {
+		PrintToChat(client, "[ABM] TakeOverZombieBotSig Signature broken.");
 		SetFailState("[ABM] TakeOverZombieBotSig Signature broken.");
 	}
 

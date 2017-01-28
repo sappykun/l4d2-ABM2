@@ -1,7 +1,26 @@
 # ABM Change Log
+## [0.1.29] - 2017-28-01
+### Fixed
+- TakeOverZombieBotSig and Spirit_12 came in with the win, thank you :D
+- SI in campaign wouldn't respawn if a round was reset (.e.g, survivors died)
+- Setting abm_tankchunkhp to 0 would give you a zero health Tank
+- SI assisted spawning shouldn't clobber survivors while they're getting ready
+
+### Changed
+- The ADTimer interval is reset until survivors are at least greater than zero
+- Human SI spawn intervals went from Ludicrous Speed to Ridiculous Speed
+- Spawning more than 1 survivor spawns them in 0.2 (from 0.1)
+
+### Added
+- A print to chat when a signature is broken reasoning why ABM is unloaded
+
 ## [0.1.28] - 2017-26-01
 ### Fixed
 - Switch client team menu
+
+### Added
+- You can choose your own SI when joining team 3, (e.g., "join 3 tank")
+- Dying while SI in a non-competitive mode gives you a new ghost immediately
 
 ## [0.1.27] - 2017-26-01
 ### Added
