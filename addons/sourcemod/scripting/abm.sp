@@ -30,7 +30,7 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.29"
+#define PLUGIN_VERSION "0.1.31"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -55,7 +55,37 @@ StringMap g_QDB;      // holds player records linked by STEAM_ID
 StringMap g_QRecord;  // changes to an individual STEAM_ID mapping
 StringMap g_Cvars;
 
-char g_InfectedNames[8][] = {"Tank", "Boomer", "Smoker", "Witch", "Hunter", "Spitter", "Jockey", "Charger"};
+char g_InfectedNames[11][] = {"Boomer", "Smoker", "Boomer", "Hunter", "Spitter", "Jockey", "Charger", "Boomer", "Tank", "Boomer", "Witch"};
+// char g_InfectedPaths[27][] = {  // sv_precacheinfo
+// 	"models/infected/limbs/exploded_boomer_steak1.mdl",
+// 	"models/infected/limbs/exploded_boomer.mdl",
+// 	"models/infected/limbs/exploded_boomer_head.mdl",
+// 	"models/infected/limbs/exploded_boomer_rarm.mdl",
+// 	"models/infected/limbs/exploded_boomer_steak2.mdl",
+// 	"models/infected/limbs/exploded_boomer_steak3.mdl",
+// 	"models/infected/smoker_tongue_attach.mdl",
+// 	"models/infected/hunter.mdl",
+// 	"models/infected/smoker.mdl",
+// 	"models/infected/boomer.mdl",
+// 	"models/infected/spitter.mdl",
+// 	"models/infected/jockey.mdl",
+// 	"models/infected/charger.mdl",
+// 	"models/infected/hulk.mdl",
+// 	"models/infected/witch.mdl",
+// 	"models/infected/limbs/limb_male_head01.mdl",
+// 	"models/infected/limbs/limb_male_rarm01.mdl",
+// 	"models/infected/limbs/limb_male_rleg01.mdl",
+// 	"models/infected/limbs/limb_male_larm01.mdl",
+// 	"models/infected/limbs/limb_male_lleg01.mdl",
+// 	"models/infected/witch_bride.mdl",
+// 	"models/infected/hulk_dlc3.mdl",
+// 	"models/infected/boomette.mdl",
+// 	"models/v_models/weapons/v_claw_Boomer.mdl",
+// 	"models/v_models/weapons/v_claw_Hunter.mdl",
+// 	"models/v_models/weapons/v_claw_Smoker.mdl",
+// 	"models/v_models/weapons/v_claw_hulk.mdl",
+// };
+
 char g_SurvivorNames[8][] = {"Nick", "Rochelle", "Coach", "Ellis", "Bill", "Zoey", "Francis", "Louis"};
 char g_SurvivorPaths[8][] = {
 	"models/survivors/survivor_gambler.mdl",
@@ -284,7 +314,7 @@ PlayerActivate(int client) {
 		AssignModel(client, g_ghost);
 
 		if (!g_IsVs) {
-			if (g_onteam == 3 && g_queued) {
+			if (g_onteam == 3) {
 				SwitchTeam(client, 3);
 			}
 		}
@@ -297,7 +327,7 @@ public RoundStartHook(Handle event, const char[] name, bool dontBroadcast) {
 
 	for (int i = 1 ; i <= MaxClients ; i++) {
 		if (GetQRecord(i)) {
-			if (g_onteam == 3 && g_queued) {
+			if (g_onteam == 3) {
 				SwitchTeam(i, 3);
 			}
 		}
@@ -439,7 +469,7 @@ public Action ADTimer(Handle timer) {
 
 					if (GetClientTeam(i) <= 1 && !g_inspec) {
 						g_QRecord.SetValue("queued", true, true);
-						g_iQueue.Push(i);
+						QueueUp(i, 3);
 					}
 				}
 
@@ -566,11 +596,17 @@ public GoIdleHook(Handle event, const char[] name, bool dontBroadcast) {
 	Echo(1, "GoIdleHook: %s", name);
 	int player = GetEventInt(event, "player");
 	int client = GetClientOfUserId(player);
-	GoIdle(client);
+
+	if (GetQRecord(client)) {
+		switch (g_onteam) {
+			case 2: GoIdle(client);
+			case 3: SwitchTeam(client, 3);
+		}
+	}
 }
 
 GoIdle(int client, onteam=0) {
-	Echo(1, "GoIdle: %d", client);
+	Echo(1, "GoIdle: %d %d", client, onteam);
 
 	if (GetQRecord(client)) {
 
@@ -629,7 +665,7 @@ RemoveQDBKey(int client) {
 }
 
 public Action RmBotsTimer(Handle timer, any asmany) {
-	Echo(3, "RmBotsTimer");
+	Echo(3, "RmBotsTimer: %d", asmany);
 
 	if (!g_IsVs) {
 		RmBots(asmany, 2);
@@ -802,6 +838,48 @@ int SetQRecord(int client) {
 	return result;
 }
 
+QueueUp(int client, int onteam) {
+	Echo(1, "QueueUp: %d %d", client, onteam);
+
+	if (onteam >= 2 && GetQRecord(client)) {
+		Unqueue(client);
+
+		switch (onteam) {
+			case 2: g_sQueue.Push(client);
+			case 3: g_iQueue.Push(client);
+		}
+
+		g_QRecord.SetValue("queued", true, true);
+	}
+}
+
+Unqueue(int client) {
+	Echo(1, "Unqueue: %d", client);
+
+	if (GetQRecord(client)) {
+		g_QRecord.SetValue("queued", false, true);
+
+		int iLength = g_iQueue.Length;
+		int sLength = g_sQueue.Length;
+
+		if (iLength > 0) {
+			for (int i = iLength - 1 ; i > -1 ; i--) {
+				if (g_iQueue.Get(i) == client) {
+					g_iQueue.Erase(i);
+				}
+			}
+		}
+
+		if (sLength > 0) {
+			for (int i = sLength - 1 ; i > -1 ; i--) {
+				if (g_sQueue.Get(i) == client) {
+					g_sQueue.Erase(i);
+				}
+			}
+		}
+	}
+}
+
 public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 	Echo(1, "OnSpawnHook: %s", name);
 
@@ -815,24 +893,38 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 		return;
 	}
 
-	int client;
+	static oldTank;
+	int newTank;
 	int onteam = GetClientTeam(target);
-	int i;
 
 	if (!g_IsVs && onteam == 3) {
-		while (i < g_iQueue.Length) {
-			client = g_iQueue.Get(i);
+		if (StrContains(g_pN, "Tank") >= 0) {
+			for (int i = 1 ; i <= MaxClients ; i++) {
+				if (GetQRecord(i) && g_onteam == 3) {
+					if (GetEntProp(i, Prop_Send, "m_zombieClass", i) != 8) {
 
-			if (GetQRecord(client)) {
-				SwitchToBot(client, target);
+						if (newTank == 0 || i > oldTank) {
+							newTank = i;
+						}
 
-				if (g_iQueue.Length > i) {
-					g_iQueue.Erase(i);
-					break;
+						if (oldTank != i) {
+							oldTank = i;
+							SwitchToBot(i, target);
+							return;
+						}
+					}
 				}
 			}
 
-			i++;
+			if (IsClientValid(newTank)) {
+				SwitchToBot(newTank, target);
+				return;
+			}
+		}
+
+		if (g_iQueue.Length > 0) {
+			SwitchToBot(g_iQueue.Get(0), target);
+			return;
 		}
 	}
 
@@ -845,22 +937,9 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 public Action OnSpawnHookTimer(Handle timer, any target) {
 	Echo(1, "OnSpawnHookTimer: %d", target);
 
-	int client;
-	int i;
-
-	while (i < g_sQueue.Length) {
-		client = g_sQueue.Get(i);
-
-		if (GetQRecord(client)) {
-			SwitchToBot(client, target);
-
-			if (g_sQueue.Length > i) {
-				g_sQueue.Erase(i);
-				break;
-			}
-		}
-
-		i++;
+	if (g_sQueue.Length > 0) {
+		SwitchToBot(g_sQueue.Get(0), target);
+		return;
 	}
 }
 
@@ -1135,7 +1214,11 @@ GhostsModeProtector(int state) {
 }
 
 CleanSIName(char model[32], bool randomize=true) {
+	Echo(1, "CleanSIName: %s %d", model, randomize);
+
 	int i = GetModelIndexByName(model, 3);
+	static char infected[6][] = {"Boomer", "Smoker", "Hunter", "Spitter", "Jockey", "Charger"};
+
 
 	switch (model[0] != EOS && i >= 0) {
 		case 1: {
@@ -1144,11 +1227,8 @@ CleanSIName(char model[32], bool randomize=true) {
 
 		default: {
 			if (randomize) {
-				while (i <= 0 || i == 3) {  // no tank 0 or witch 3
-					i = GetRandomInt(0, sizeof(g_InfectedNames) - 1);
-				}
-
-				model = g_InfectedNames[i];
+				i = GetRandomInt(0, sizeof(infected) - 1);
+				model = infected[i];
 			}
 
 			else {
@@ -1159,7 +1239,7 @@ CleanSIName(char model[32], bool randomize=true) {
 }
 
 bool AddInfected(int version=0, char model[32]="") {
-	Echo(1, "AddInfected");
+	Echo(1, "AddInfected: %d %s", version, model);
 
 	// GetEntProp(i, Prop_Send, "m_ghostSpawnState");
 	// considering above in spawning all with z_spawn
@@ -1211,7 +1291,7 @@ bool AddInfected(int version=0, char model[32]="") {
 }
 
 SwitchToSpec(int client, int onteam=1) {
-	Echo(1, "SwitchToSpectator: %d", client);
+	Echo(1, "SwitchToSpectator: %d %d", client, onteam);
 
 	if (GetQRecord(client)) {
 		g_QRecord.SetValue("inspec", true, true);
@@ -1276,24 +1356,14 @@ public Action SwitchToBotTimer(Handle timer, Handle pack) {
 
 	if (IsClientValid(bot)) {
 		switch (onteam) {
-			case 2: {
-				SetHumanSpecSig(bot, client);
-				TakeOverBotSig(client);
-			}
-
-			case 3: {
-				if (TakeOverZombieBotSig(client, bot)) {
-					if (si_ghost) {
-						State_TransitionSig(client, 8);
-					}
-				}
-			}
+			case 2: TakeOverBotSig(client, bot);
+			case 3: TakeOverZombieBotSig(client, bot, si_ghost);
 		}
 	}
 
-	if (IsPlayerAlive(client)) {
-		g_QRecord.SetValue("queued", false, true);
-	}
+// 	if (IsPlayerAlive(client)) {
+// 		g_QRecord.SetValue("queued", false, true);
+// 	}
 
 	return Plugin_Stop;
 }
@@ -1324,12 +1394,12 @@ TakeOver(int client, int onteam) {
 
 		switch (onteam) {
 			case 2: {
-				g_sQueue.Push(client);
+				QueueUp(client, 2);
 				AddSurvivor();
 			}
 
 			case 3: {
-				g_iQueue.Push(client);
+				QueueUp(client, 3);
 				AddInfected();
 			}
 		}
@@ -1501,6 +1571,7 @@ SwitchTeam(int client, int onteam, char model[32]="") {
 		switch (onteam) {
 			case 0: GoIdle(client, 0);
 			case 1: GoIdle(client, 1);
+			//case 4: ChangeClientTeam(client, 4);
 			default: {
 				if (onteam <= 3 && onteam >= 2) {
 					if (g_onteam != onteam) {
@@ -1520,7 +1591,7 @@ SwitchTeam(int client, int onteam, char model[32]="") {
 						}
 
 						g_QRecord.SetString("model", model, true);
-						g_iQueue.Push(client);
+						QueueUp(client, 3);
 						AddInfected(1, model);
 						return;
 					}
@@ -1713,6 +1784,14 @@ PrecacheModels() {
 			Echo(1, " - Precaching Survivor %s, retcode: %d", g_sB, retcode);
 		}
 	}
+
+// 	for (int i = 0 ; i < sizeof(g_InfectedPaths) ; i++) {
+// 		Format(g_sB, sizeof(g_sB), "%s", g_InfectedPaths[i]);
+// 		if (!IsModelPrecached(g_sB)) {  // this may not work for SI, why?
+// 			int retcode = PrecacheModel(g_sB);
+// 			Echo(1, " - Precaching Infected %s, retcode: %d", g_sB, retcode);
+// 		}
+// 	}
 }
 
 AssignModel(int client, char [] model) {
@@ -1771,7 +1850,7 @@ int GetClientModelIndex(int client) {
 }
 
 int GetModelIndexByName(char [] name, int onteam=2) {
-	Echo(1, "GetModelIndexByName: %s", name);
+	Echo(1, "GetModelIndexByName: %s %d", name, onteam);
 
 	if (onteam == 2) {
 		for (int i ; i < sizeof(g_SurvivorNames) ; i ++) {
@@ -1871,8 +1950,12 @@ void State_TransitionSig(int client, int mode) {
 	}
 }
 
-void TakeOverBotSig(int client) {
-	Echo(1, "TakeOverBotSig: %d", client);
+bool TakeOverBotSig(int client, int bot) {
+	Echo(1, "TakeOverBotSig: %d %d", client, bot);
+
+	if (!GetQRecord(client)) {
+		return false;
+	}
 
 	static Handle hSwitch;
 	if (hSwitch == null) {
@@ -1883,7 +1966,19 @@ void TakeOverBotSig(int client) {
 	}
 
 	if (hSwitch != null) {
-		SDKCall(hSwitch, client, true);
+		if (IsClientInKickQueue(bot)) {
+			KickClient(bot);
+		}
+
+		else if (IsClientValid(bot) && IsFakeClient(bot) && IsPlayerAlive(bot)) {
+			if (GetClientTeam(bot) == 2) {
+				SetHumanSpecSig(bot, client);
+				SDKCall(hSwitch, client, true);
+
+				Unqueue(client);
+				return true;
+			}
+		}
 	}
 
 	else {
@@ -1891,9 +1986,12 @@ void TakeOverBotSig(int client) {
 		SetFailState("[ABM] TakeOverBotSig Signature broken.");
 	}
 
+	g_QRecord.SetValue("queued", true, true);
+	QueueUp(client, 2);
+	return false;
 }
 
-bool TakeOverZombieBotSig(int client, int bot) {
+bool TakeOverZombieBotSig(int client, int bot, bool si_ghost) {
 	Echo(1, "TakeOverZombieBotSig: %d %d", client, bot);
 
 	if (!GetQRecord(client)) {
@@ -1914,8 +2012,16 @@ bool TakeOverZombieBotSig(int client, int bot) {
 		}
 
 		else if (IsClientValid(bot) && IsFakeClient(bot) && IsPlayerAlive(bot)) {
-			SDKCall(hSwitch, client, bot);
-			return true;
+			if (GetClientTeam(bot) == 3) {
+				SDKCall(hSwitch, client, bot);
+
+				if (si_ghost) {
+					State_TransitionSig(client, 8);
+				}
+
+				Unqueue(client);
+				return true;
+			}
 		}
 	}
 
@@ -1925,7 +2031,7 @@ bool TakeOverZombieBotSig(int client, int bot) {
 	}
 
 	g_QRecord.SetValue("queued", true, true);
-	g_iQueue.Push(client);
+	QueueUp(client, 3);
 	return false;
 }
 
@@ -2590,7 +2696,7 @@ ModelsMenu(int client, char [] title) {
 }
 
 TeamsMenu(int client, char [] title, bool all=true) {
-	Echo(1, "TeamsMenu: %d %s", client, title);
+	Echo(1, "TeamsMenu: %d %s %d", client, title, all);
 
 	Menu menu = new Menu(GenericMenuHandler);
 	menu.SetTitle(title);
@@ -2612,7 +2718,7 @@ TeamsMenu(int client, char [] title, bool all=true) {
 
 TeamMatesMenu(int client, char [] title, int mtype=2, int target=0, bool incDead=true,
 			  bool repeat=false, int homeTeam=0) {
-	Echo(1, "TeamMatesMenu: %d %s %d %d %d %d", client, title, mtype, target, incDead, repeat);
+	Echo(1, "TeamMatesMenu: %d %s %d %d %d %d %d", client, title, mtype, target, incDead, repeat, homeTeam);
 
 	Menu menu = new Menu(GenericMenuHandler);
 	menu.SetTitle(title);

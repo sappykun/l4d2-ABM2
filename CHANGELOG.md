@@ -1,4 +1,19 @@
 # ABM Change Log
+## [0.1.31] - 2017-01-02
+### Added
+- QueueUp adds players to team queues (automatically unqueues them elsewhere)
+- Unqueue will remove any one player from all possible queues
+- Everyone playing SI in non-Vs mode should automatically get the Tank next
+
+### Fixed
+- Losing your SI to spectator in certain situations puts you in a new body
+
+### Changed
+- Cleaned up some Echo calls
+- TakeOverBotSig cleaned with aggressive checking and now takes a bot argument
+- Takeovers with TakeOverBotSig and TakeOverZombieBotSig unqueues automatically
+- TakeOverZombieBotSig now takes a si_ghost argument
+
 ## [0.1.29] - 2017-28-01
 ### Fixed
 - TakeOverZombieBotSig and Spirit_12 came in with the win, thank you :D
