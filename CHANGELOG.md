@@ -1,4 +1,15 @@
 # ABM Change Log
+## [0.1.32] - 2017-02-02
+### Changed
+- Slight optimizations all across the board
+- g_AssistedSpawning now toggles its state based on humans on SI
+- Cycling through bots on a team should only cycle through the living
+
+### Fixed
+- Joining survivors as a dead teammate could lock you into that dead body
+- Cycling through bots fast enough can cause you to lose a bot to the ether
+- More aggressive checking may have solved some crashes related to ABM
+
 ## [0.1.31] - 2017-01-02
 ### Added
 - QueueUp adds players to team queues (automatically unqueues them elsewhere)

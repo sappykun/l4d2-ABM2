@@ -30,7 +30,7 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.31"
+#define PLUGIN_VERSION "0.1.32"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -396,13 +396,13 @@ public Action ADTimer(Handle timer) {
 		g_ADFreeze = false;
 	}
 
-	if (CountTeamMates(2) >= 1 && !g_RemovedPlayers) {
+	if (!g_RemovedPlayers && CountTeamMates(2) >= 1) {
 		RmBots((g_MinPlayers + g_ExtraPlayers) * -1, 2);
 		g_RemovedPlayers = true;
 	}
 
 	if (g_RemovedPlayers) {
-		if (CountTeamMates(2) >= 1 && !g_AddedPlayers) {
+		if (!g_AddedPlayers && CountTeamMates(2) >= 1) {
 			MkBots((g_MinPlayers + g_ExtraPlayers) * -1, 2);
 			g_AddedPlayers = true;
 		}
@@ -460,6 +460,7 @@ public Action ADTimer(Handle timer) {
 
 	int onteam;
 	float nTakeOver = 0.1;
+	g_AssistedSpawning = false;
 
 	for (int i = 1 ; i <= MaxClients ; i++) {
 		if (GetQRecord(i)) {
@@ -770,7 +771,8 @@ bool GetQRecord(int client) {
 
 	if (SetQKey(client)) {
 		if (g_QDB.GetValue(g_QKey, g_QRecord)) {
-			if (IsPlayerAlive(client)) {
+
+			if (IsClientValid(client) && IsPlayerAlive(client)) {
 				GetClientAbsOrigin(client, g_origin);
 				g_QRecord.SetArray("origin", g_origin, sizeof(g_origin), true);
 			}
@@ -898,19 +900,21 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 	int onteam = GetClientTeam(target);
 
 	if (!g_IsVs && onteam == 3) {
-		if (StrContains(g_pN, "Tank") >= 0) {
-			for (int i = 1 ; i <= MaxClients ; i++) {
-				if (GetQRecord(i) && g_onteam == 3) {
-					if (GetEntProp(i, Prop_Send, "m_zombieClass", i) != 8) {
+		if (g_AssistedSpawning) {
+			if (StrContains(g_pN, "Tank") >= 0) {
+				for (int i = 1 ; i <= MaxClients ; i++) {
+					if (GetQRecord(i) && g_onteam == 3) {
+						if (GetEntProp(i, Prop_Send, "m_zombieClass", i) != 8) {
 
-						if (newTank == 0 || i > oldTank) {
-							newTank = i;
-						}
+							if (newTank == 0 || i > oldTank) {
+								newTank = i;
+							}
 
-						if (oldTank != i) {
-							oldTank = i;
-							SwitchToBot(i, target);
-							return;
+							if (oldTank != i) {
+								oldTank = i;
+								SwitchToBot(i, target);
+								return;
+							}
 						}
 					}
 				}
@@ -1188,6 +1192,10 @@ GhostsModeProtector(int state) {
 	// z_spawn_old tank auto;
 	// GhostsModeProtector(1);
 
+	if (!g_IsVs || !g_AssistedSpawning) {
+		return;
+	}
+
 	static ghosts[MAXPLAYERS + 1];
 
 	switch (state) {
@@ -1316,57 +1324,68 @@ SwitchToBot(int client, int bot, bool si_ghost=true) {
 	Echo(1, "SwitchToBot: %d %d %d", client, bot, si_ghost);
 
 	if (client != bot && IsClientValid(bot)) {
-		int onteam = GetClientTeam(bot);
-
-		if (GetQRecord(client)) {
-			GoIdle(client, 1);
-			SwitchToBotMiddleManWTF(client, bot, onteam, si_ghost);
-		}
-	}
-}
-
-SwitchToBotMiddleManWTF(int client, int bot, int onteam, bool si_ghost=true) {
-	Echo(1, "SwitchToBotMiddleManWTF: %d %d %d %d", client, bot, onteam, si_ghost);
-
-	DataPack pack;
-	CreateDataTimer(0.1, SwitchToBotTimer, pack);
-	pack.WriteCell(client);
-	pack.WriteCell(bot);
-	pack.WriteCell(onteam);
-	pack.WriteCell(si_ghost);
-}
-
-public Action SwitchToBotTimer(Handle timer, Handle pack) {
-	Echo(1, "SwitchToBotTimer");
-
-	int client;
-	int bot;
-	int onteam;
-	bool si_ghost;
-
-	ResetPack(pack);
-	client = ReadPackCell(pack);
-	bot = ReadPackCell(pack);
-	onteam = ReadPackCell(pack);
-	si_ghost = ReadPackCell(pack);
-
-	if (!GetQRecord(client)) {
-		return Plugin_Stop;
-	}
-
-	if (IsClientValid(bot)) {
-		switch (onteam) {
+		switch (GetClientTeam(bot)) {
 			case 2: TakeOverBotSig(client, bot);
 			case 3: TakeOverZombieBotSig(client, bot, si_ghost);
 		}
 	}
-
-// 	if (IsPlayerAlive(client)) {
-// 		g_QRecord.SetValue("queued", false, true);
-// 	}
-
-	return Plugin_Stop;
 }
+
+// SwitchToBot(int client, int bot, bool si_ghost=true) {
+// 	Echo(1, "SwitchToBot: %d %d %d", client, bot, si_ghost);
+//
+// 	if (client != bot && IsClientValid(bot)) {
+// 		int onteam = GetClientTeam(bot);
+//
+// 		if (GetQRecord(client)) {
+// 			GoIdle(client, 1);
+// 			SwitchToBotMiddleManWTF(client, bot, onteam, si_ghost);
+// 		}
+// 	}
+// }
+//
+// SwitchToBotMiddleManWTF(int client, int bot, int onteam, bool si_ghost=true) {
+// 	Echo(1, "SwitchToBotMiddleManWTF: %d %d %d %d", client, bot, onteam, si_ghost);
+//
+// 	DataPack pack;
+// 	CreateDataTimer(0.1, SwitchToBotTimer, pack);
+// 	pack.WriteCell(client);
+// 	pack.WriteCell(bot);
+// 	pack.WriteCell(onteam);
+// 	pack.WriteCell(si_ghost);
+// }
+//
+// public Action SwitchToBotTimer(Handle timer, Handle pack) {
+// 	Echo(1, "SwitchToBotTimer");
+//
+// 	int client;
+// 	int bot;
+// 	int onteam;
+// 	bool si_ghost;
+//
+// 	ResetPack(pack);
+// 	client = ReadPackCell(pack);
+// 	bot = ReadPackCell(pack);
+// 	onteam = ReadPackCell(pack);
+// 	si_ghost = ReadPackCell(pack);
+//
+// 	if (!GetQRecord(client)) {
+// 		return Plugin_Stop;
+// 	}
+//
+// 	if (IsClientValid(bot)) {
+// 		switch (onteam) {
+// 			case 2: TakeOverBotSig(client, bot);
+// 			case 3: TakeOverZombieBotSig(client, bot, si_ghost);
+// 		}
+// 	}
+//
+// // 	if (IsPlayerAlive(client)) {
+// // 		g_QRecord.SetValue("queued", false, true);
+// // 	}
+//
+// 	return Plugin_Stop;
+// }
 
 TakeOver(int client, int onteam) {
 	Echo(1, "TakeOver: %d %d", client, onteam);
@@ -1530,7 +1549,7 @@ int GetNextBot(int onteam, int skipIndex=0) {
 	int bot;
 
 	for (int i = 1 ; i <= MaxClients ; i++) {
-		if (GetClientManager(i) == 0) {
+		if (GetClientManager(i) == 0 && IsPlayerAlive(i)) {
 			if (GetClientTeam(i) == onteam) {
 				if (i <= skipIndex) {
 					if (bot == 0) {
@@ -1628,7 +1647,7 @@ MkBots(int asmany, int onteam) {
 	}
 
 	float rate;
-	DataPack pack;
+	DataPack pack = new DataPack();
 
 	switch (onteam) {
 		case 2: rate = 0.2;
@@ -1972,6 +1991,7 @@ bool TakeOverBotSig(int client, int bot) {
 
 		else if (IsClientValid(bot) && IsFakeClient(bot) && IsPlayerAlive(bot)) {
 			if (GetClientTeam(bot) == 2) {
+				SwitchToSpec(client);
 				SetHumanSpecSig(bot, client);
 				SDKCall(hSwitch, client, true);
 
@@ -1986,6 +2006,7 @@ bool TakeOverBotSig(int client, int bot) {
 		SetFailState("[ABM] TakeOverBotSig Signature broken.");
 	}
 
+	g_QRecord.SetValue("lastid", bot, true);
 	g_QRecord.SetValue("queued", true, true);
 	QueueUp(client, 2);
 	return false;
@@ -2013,6 +2034,7 @@ bool TakeOverZombieBotSig(int client, int bot, bool si_ghost) {
 
 		else if (IsClientValid(bot) && IsFakeClient(bot) && IsPlayerAlive(bot)) {
 			if (GetClientTeam(bot) == 3) {
+				SwitchToSpec(client);
 				SDKCall(hSwitch, client, bot);
 
 				if (si_ghost) {
@@ -2020,6 +2042,7 @@ bool TakeOverZombieBotSig(int client, int bot, bool si_ghost) {
 				}
 
 				Unqueue(client);
+				g_AssistedSpawning = true;
 				return true;
 			}
 		}
@@ -2030,6 +2053,7 @@ bool TakeOverZombieBotSig(int client, int bot, bool si_ghost) {
 		SetFailState("[ABM] TakeOverZombieBotSig Signature broken.");
 	}
 
+	g_QRecord.SetValue("lastid", bot, true);
 	g_QRecord.SetValue("queued", true, true);
 	QueueUp(client, 3);
 	return false;
