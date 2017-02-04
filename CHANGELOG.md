@@ -1,4 +1,8 @@
 # ABM Change Log
+## [0.1.33] - 2017-03-02
+### Fixed
+- When someone joins a new bot is created over stuffing them into a dead body
+
 ## [0.1.32] - 2017-02-02
 ### Changed
 - Slight optimizations all across the board

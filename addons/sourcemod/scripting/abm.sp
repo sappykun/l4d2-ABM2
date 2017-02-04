@@ -30,7 +30,7 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.32"
+#define PLUGIN_VERSION "0.1.33"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -1192,7 +1192,7 @@ GhostsModeProtector(int state) {
 	// z_spawn_old tank auto;
 	// GhostsModeProtector(1);
 
-	if (!g_IsVs || !g_AssistedSpawning) {
+	if (!g_AssistedSpawning || g_IsVs) {
 		return;
 	}
 
@@ -1543,24 +1543,26 @@ int GetClientManager(int target) {
 	return result;  // target IS valid and NOT managed
 }
 
-int GetNextBot(int onteam, int skipIndex=0) {
+int GetNextBot(int onteam, int skipIndex=0, alive=false) {
 	Echo(1, "GetNextBot: %d %d", onteam, skipIndex);
 
 	int bot;
 
 	for (int i = 1 ; i <= MaxClients ; i++) {
-		if (GetClientManager(i) == 0 && IsPlayerAlive(i)) {
+		if (GetClientManager(i) == 0) {
 			if (GetClientTeam(i) == onteam) {
-				if (i <= skipIndex) {
-					if (bot == 0) {
+				if (bot == 0) {
+					if (!alive || alive && IsPlayerAlive(i)) {
 						bot = i;
 					}
-
-					continue;
 				}
 
-				bot = i;
-				break;
+				if (i > skipIndex) {
+					if (!alive || alive && IsPlayerAlive(i)) {
+						bot = i;
+						break;
+					}
+				}
 			}
 		}
 	}
@@ -1576,7 +1578,7 @@ CycleBots(int client, int onteam) {
 	}
 
 	if (GetQRecord(client)) {
-		int bot = GetNextBot(onteam, g_lastid);
+		int bot = GetNextBot(onteam, g_lastid, true);
 		if (GetClientManager(bot) == 0) {
 			SwitchToBot(client, bot, false);
 		}
@@ -1989,7 +1991,7 @@ bool TakeOverBotSig(int client, int bot) {
 			KickClient(bot);
 		}
 
-		else if (IsClientValid(bot) && IsFakeClient(bot) && IsPlayerAlive(bot)) {
+		else if (IsClientValid(bot) && IsFakeClient(bot)) {
 			if (GetClientTeam(bot) == 2) {
 				SwitchToSpec(client);
 				SetHumanSpecSig(bot, client);
@@ -2007,8 +2009,11 @@ bool TakeOverBotSig(int client, int bot) {
 	}
 
 	g_QRecord.SetValue("lastid", bot, true);
-	g_QRecord.SetValue("queued", true, true);
-	QueueUp(client, 2);
+	if (GetClientTeam(client) == 1) {
+		g_QRecord.SetValue("queued", true, true);
+		QueueUp(client, 2);
+	}
+
 	return false;
 }
 
@@ -2054,8 +2059,11 @@ bool TakeOverZombieBotSig(int client, int bot, bool si_ghost) {
 	}
 
 	g_QRecord.SetValue("lastid", bot, true);
-	g_QRecord.SetValue("queued", true, true);
-	QueueUp(client, 3);
+	if (GetClientTeam(client) == 1) {
+		g_QRecord.SetValue("queued", true, true);
+		QueueUp(client, 3);
+	}
+
 	return false;
 }
 
