@@ -1,4 +1,9 @@
 # ABM Change Log
+## [0.1.34] - 2017-09-02
+### Added
+- Preliminary Vs support
+- Optional dependency on Left 4 Downtown 2 (5+ auto difficulty on campaigns)
+
 ## [0.1.33] - 2017-03-02
 ### Fixed
 - When someone joins a new bot is created over stuffing them into a dead body

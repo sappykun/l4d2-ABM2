@@ -30,7 +30,10 @@ Free Software Foundation, Inc.
 #include <sdktools>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "0.1.33"
+#undef REQUIRE_EXTENSIONS
+#include <left4downtown>
+
+#define PLUGIN_VERSION "0.1.34"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -134,6 +137,7 @@ ConVar g_cvExtraPlayers;
 ConVar g_cvTankHealth;
 ConVar g_cvTankChunkHp;
 ConVar g_cvSpawnInterval;
+ConVar g_cvMaxSI;
 
 int g_LogLevel;
 int g_MinPlayers;
@@ -146,10 +150,11 @@ int g_Zoey;
 int g_ExtraPlayers;
 int g_TankChunkHp;
 int g_SpawnInterval;
+int g_MaxSI;
 
 public Plugin myinfo= {
 	name = "ABM",
-	author = "Victor BUCKWANGS Gonzalez",
+	author = "Victor \"BUCKWANGS\" Gonzalez",
 	description = "A 5+ Player Enhancement Plugin for L4D2",
 	version = PLUGIN_VERSION,
 	url = "https://gitlab.com/vbgunz/ABM"
@@ -233,6 +238,10 @@ public OnPluginStart() {
 	g_cvTankChunkHp = CreateConVar("abm_tankchunkhp", "2500", "Health chunk per survivor on 5+ missions");
 	g_cvSpawnInterval = CreateConVar("abm_spawninterval", "18", "SI full team spawn in (5 x N)");
 
+	g_cvMaxSI = FindConVar("z_max_player_zombies");
+	SetConVarBounds(g_cvMaxSI, ConVarBound_Lower, true, 1.0);
+	SetConVarBounds(g_cvMaxSI, ConVarBound_Upper, true, 24.0);
+
 	switch(g_OS) {
 		case 0: Format(g_sB, sizeof(g_sB), "5");
 		case 1: Format(g_sB, sizeof(g_sB), "1");
@@ -269,6 +278,36 @@ public OnPluginStart() {
 	StartAD();
 }
 
+public Action L4D_OnGetScriptValueInt(const String:key[], &retVal) {
+	Echo(4, "L4D_OnGetScriptValueInt: %s, %d", key, retVal);
+
+	int val = retVal;
+
+	if (StrEqual(key, "ShouldIgnoreClearStateForSpawn")) val = 1;
+	else if (StrEqual(key, "AlwaysAllowWanderers")) val = 1;
+	else if (StrEqual(key, "ClearedWandererRespawnChance")) val = 1;
+	else if (StrEqual(key, "EnforceFinaleNavSpawnRules")) val = 0;
+	else if (StrEqual(key, "DisallowThreatType")) val = 0;
+	else if (StrEqual(key, "ProhibitBosses")) val = 0;
+	else if (StrEqual(key, "MaxSpecials")) val = 24;
+	else if (StrEqual(key, "DominatorLimit")) val = 24;
+	else if (StrEqual(key, "BoomerLimit")) val = 4;
+	else if (StrEqual(key, "SmokerLimit")) val = 4;
+	else if (StrEqual(key, "HunterLimit")) val = 4;
+	else if (StrEqual(key, "ChargerLimit")) val = 4;
+	else if (StrEqual(key, "SpitterLimit")) val = 4;
+	else if (StrEqual(key, "JockeyLimit")) val = 4;
+	else if (StrEqual(key, "ZombieDontClear")) val = 1;
+// 	else if (StrEqual(key, "CommonLimit")) val = 30;
+
+	if (val != retVal) {
+		retVal = val;
+		return Plugin_Handled;
+	}
+
+	return Plugin_Continue;
+}
+
 public RoundFreezeEndHook(Handle event, const char[] name, bool dontBroadcast) {
 	Echo(1, "RoundFreezeEndHook: %s", name);
 
@@ -280,18 +319,20 @@ public RoundFreezeEndHook(Handle event, const char[] name, bool dontBroadcast) {
 	StringMapSnapshot keys = g_QDB.Snapshot();
 	g_iQueue.Clear();
 
-	for (int i ; i < keys.Length ; i++) {
-		keys.GetKey(i, g_sB, sizeof(g_sB));
-		g_QDB.GetValue(g_sB, g_QRecord);
-		g_QRecord.GetValue("onteam", g_onteam);
-		g_QRecord.GetValue("client", g_client);
-		g_QRecord.GetString("model", g_model, sizeof(g_model));
-		g_QRecord.SetString("ghost", g_model, true);
+	if (!g_IsVs) {
+		for (int i ; i < keys.Length ; i++) {
+			keys.GetKey(i, g_sB, sizeof(g_sB));
+			g_QDB.GetValue(g_sB, g_QRecord);
+			g_QRecord.GetValue("onteam", g_onteam);
+			g_QRecord.GetValue("client", g_client);
+			g_QRecord.GetString("model", g_model, sizeof(g_model));
+			g_QRecord.SetString("ghost", g_model, true);
 
-		if (g_onteam == 3) {
-			SwitchToSpec(g_client);
-			g_QRecord.SetValue("queued", true, true);
-			g_QRecord.SetValue("inspec", false, true);
+			if (g_onteam == 3) {
+				SwitchToSpec(g_client);
+				g_QRecord.SetValue("queued", true, true);
+				g_QRecord.SetValue("inspec", false, true);
+			}
 		}
 	}
 
@@ -327,7 +368,7 @@ public RoundStartHook(Handle event, const char[] name, bool dontBroadcast) {
 
 	for (int i = 1 ; i <= MaxClients ; i++) {
 		if (GetQRecord(i)) {
-			if (g_onteam == 3) {
+			if (!g_IsVs && g_onteam == 3) {
 				SwitchTeam(i, 3);
 			}
 		}
@@ -1192,7 +1233,7 @@ GhostsModeProtector(int state) {
 	// z_spawn_old tank auto;
 	// GhostsModeProtector(1);
 
-	if (!g_AssistedSpawning || g_IsVs) {
+	if (CountTeamMates(3, 1) == 0) {
 		return;
 	}
 
@@ -1450,10 +1491,8 @@ public Action TakeOverTimer(Handle timer, any client) {
 			team2 = CountTeamMates(2, 1);
 			team3 = CountTeamMates(3, 1);
 
-			if (team2 + team3 > 8) {
-				if (team3 < team2) {
-					teamX = 3;
-				}
+			if (team3 < team2) {
+				teamX = 3;
 			}
 		}
 
@@ -1471,12 +1510,25 @@ int CountTeamMates(int onteam, int mtype=2) {
 	// mtype 1: counts only humans
 	// mtype 2: counts all players on team
 
+	int result;
+
 	if (mtype == 2) {
-		return GetTeamClientCount(onteam);
+		static lastSize;
+		result = GetTeamClientCount(onteam);
+
+		if (result > 0 && onteam == 2) {
+			g_MaxSI = result;
+
+			if (g_MaxSI != lastSize) {
+				SetConVarFloat(g_cvMaxSI, float(result + 1));
+				lastSize = g_MaxSI;
+			}
+		}
+
+		return result;
 	}
 
 	int j;
-	int result;
 	int humans;
 	int bots;
 
@@ -1603,6 +1655,12 @@ SwitchTeam(int client, int onteam, char model[32]="") {
 					g_QRecord.SetValue("onteam", onteam, true);
 
 					if (onteam == 3) {
+
+						if (g_IsVs) {
+							ChangeClientTeam(client, 3);
+							return;
+						}
+
 						switch (g_model[0] == EOS && model[0] != EOS) {
 							case 1: CleanSIName(model);
 							case 0: {
