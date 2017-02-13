@@ -1,4 +1,11 @@
 # ABM Change Log
+## [0.1.35] - 2017-13-02
+### Fixed
+- Mobs of SI far greater than the size of the surviving team
+- SI spectators forced to be a Tank (even if explicitly spectating)
+- Extra Tanks in ghost mode dying when a human is on SI in non-Vs
+- Model assignment slowed from 0.1 to 0.2 (fixes Fall in Death model 5+)
+
 ## [0.1.34] - 2017-09-02
 ### Added
 - Preliminary Vs support

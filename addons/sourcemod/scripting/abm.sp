@@ -33,7 +33,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.34"
+#define PLUGIN_VERSION "0.1.35"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -289,8 +289,8 @@ public Action L4D_OnGetScriptValueInt(const String:key[], &retVal) {
 	else if (StrEqual(key, "EnforceFinaleNavSpawnRules")) val = 0;
 	else if (StrEqual(key, "DisallowThreatType")) val = 0;
 	else if (StrEqual(key, "ProhibitBosses")) val = 0;
-	else if (StrEqual(key, "MaxSpecials")) val = 24;
-	else if (StrEqual(key, "DominatorLimit")) val = 24;
+	else if (StrEqual(key, "MaxSpecials")) val = g_MaxSI;
+	else if (StrEqual(key, "DominatorLimit")) val = g_MaxSI;
 	else if (StrEqual(key, "BoomerLimit")) val = 4;
 	else if (StrEqual(key, "SmokerLimit")) val = 4;
 	else if (StrEqual(key, "HunterLimit")) val = 4;
@@ -660,6 +660,7 @@ GoIdle(int client, onteam=0) {
 
 			if (onteam == 1) {
 				SwitchToSpec(client);
+				Unqueue(client);
 			}
 
 			AssignModel(g_target, g_model);
@@ -939,12 +940,16 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 	static oldTank;
 	int newTank;
 	int onteam = GetClientTeam(target);
+	static ghostTank;  // this is the extra Tank that just ghosts and dies
+	bool isTank = false;
 
 	if (!g_IsVs && onteam == 3) {
 		if (g_AssistedSpawning) {
 			if (StrContains(g_pN, "Tank") >= 0) {
+				isTank = true;
+
 				for (int i = 1 ; i <= MaxClients ; i++) {
-					if (GetQRecord(i) && g_onteam == 3) {
+					if (GetQRecord(i) && g_onteam == 3 && !g_inspec) {
 						if (GetEntProp(i, Prop_Send, "m_zombieClass", i) != 8) {
 
 							if (newTank == 0 || i > oldTank) {
@@ -965,6 +970,20 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 				SwitchToBot(newTank, target);
 				return;
 			}
+
+			else if (isTank) {
+				switch (IsClientValid(ghostTank)) {
+					case 1: {
+						ForcePlayerSuicide(ghostTank);
+						ghostTank = 0;
+					}
+
+					case 0: {
+						AddInfected(0, "Tank");
+						ghostTank = target;
+					}
+				}
+			}
 		}
 
 		if (g_iQueue.Length > 0) {
@@ -974,8 +993,8 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 	}
 
 	if (onteam == 2) {
-		CreateTimer(0.1, AutoModelTimer, target);
-		CreateTimer(0.2, OnSpawnHookTimer, target);
+		CreateTimer(0.2, AutoModelTimer, target);
+		CreateTimer(0.4, OnSpawnHookTimer, target);
 	}
 }
 
@@ -1517,10 +1536,10 @@ int CountTeamMates(int onteam, int mtype=2) {
 		result = GetTeamClientCount(onteam);
 
 		if (result > 0 && onteam == 2) {
-			g_MaxSI = result;
+			g_MaxSI = result + 1;
 
 			if (g_MaxSI != lastSize) {
-				SetConVarFloat(g_cvMaxSI, float(result + 1));
+				SetConVarFloat(g_cvMaxSI, float(result));
 				lastSize = g_MaxSI;
 			}
 		}
