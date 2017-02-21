@@ -172,6 +172,8 @@ Admins and players have manual access to **!join** and **!takeover** but note **
 
 ## Thanks
 
+Thank you **Ludastar** for reaching out and making a friend. It's always a pleasure and your help, suggestions, advice and contributions are valued to no end. Thank you for your performance tips for my servers and for the OnEntityCreated/KillEntTimer code contribution in 0.1.36. If you don't know Ludastar visit the following 2 works [L4D2 Model Changer](https://forums.alliedmods.net/showthread.php?p=2449184) and [Enhanced Throwables](https://forums.alliedmods.net/showthread.php?p=2413605) and you should hopefully appreciate what you find :)
+
 Yuge thanks to [MRxSNIPES2](http://steamcommunity.com/id/MRxSNIPES2/) for tirelessly being at the ready when I needed you. You certainly went out of your way to help and I salute you! A big thanks to [GamingBigFoot](http://steamcommunity.com/id/GamingBigfoot_Official/) for taking the testing of some issues to the next level. Making a plugin like this without those extra eyes is hard and I praise you guys for being so kind at helping me out :)
 
 Thanks to **Kruffty** for trying out ABM on a Windows dedicated server and blowing shit up. You scare me but I still love you bro! Thanks to **Sheriff Huckleberry** for telling me you're too old for that Linux command line bullshit and that I should implement menus instead. Haha.
@@ -216,13 +218,6 @@ Spectators and playing teams can't talk with one another by default. If you'd li
 
 ## Bugs
 
-- Cycling through bots too fast can make them vaporize
 - Defibs may do some strange things (see [this](https://forums.alliedmods.net/showthread.php?t=118723))
 - Witchs may target the wrong player (see [this](https://forums.alliedmods.net/showthread.php?t=121945))
-- abm_zoey 5 on Windows will most likely crash the server (also changing your model to Zoey on Windows may crash the server)
-
-## What Next?
-
-I'll try to fix whatever bugs come to my attention and I'll consider feature request but I think I'm done and I want to get started on another idea I think is unique. Hopefully it is and hopefully it's simpler.
-
-Simpler, yeah right.
+- abm_zoey 5 on Windows will most likely crash the server (Until Valve fixes it)

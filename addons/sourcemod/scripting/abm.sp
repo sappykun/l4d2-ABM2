@@ -2,7 +2,7 @@
 
 /*
 ABM a SourceMod L4D2 Plugin
-Copyright (C) 2016  Victor B. Gonzalez
+Copyright (C) 2016  Victor NgBUCKWANGS Gonzalez
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -33,7 +33,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.35"
+#define PLUGIN_VERSION "0.1.36"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -59,36 +59,6 @@ StringMap g_QRecord;  // changes to an individual STEAM_ID mapping
 StringMap g_Cvars;
 
 char g_InfectedNames[11][] = {"Boomer", "Smoker", "Boomer", "Hunter", "Spitter", "Jockey", "Charger", "Boomer", "Tank", "Boomer", "Witch"};
-// char g_InfectedPaths[27][] = {  // sv_precacheinfo
-// 	"models/infected/limbs/exploded_boomer_steak1.mdl",
-// 	"models/infected/limbs/exploded_boomer.mdl",
-// 	"models/infected/limbs/exploded_boomer_head.mdl",
-// 	"models/infected/limbs/exploded_boomer_rarm.mdl",
-// 	"models/infected/limbs/exploded_boomer_steak2.mdl",
-// 	"models/infected/limbs/exploded_boomer_steak3.mdl",
-// 	"models/infected/smoker_tongue_attach.mdl",
-// 	"models/infected/hunter.mdl",
-// 	"models/infected/smoker.mdl",
-// 	"models/infected/boomer.mdl",
-// 	"models/infected/spitter.mdl",
-// 	"models/infected/jockey.mdl",
-// 	"models/infected/charger.mdl",
-// 	"models/infected/hulk.mdl",
-// 	"models/infected/witch.mdl",
-// 	"models/infected/limbs/limb_male_head01.mdl",
-// 	"models/infected/limbs/limb_male_rarm01.mdl",
-// 	"models/infected/limbs/limb_male_rleg01.mdl",
-// 	"models/infected/limbs/limb_male_larm01.mdl",
-// 	"models/infected/limbs/limb_male_lleg01.mdl",
-// 	"models/infected/witch_bride.mdl",
-// 	"models/infected/hulk_dlc3.mdl",
-// 	"models/infected/boomette.mdl",
-// 	"models/v_models/weapons/v_claw_Boomer.mdl",
-// 	"models/v_models/weapons/v_claw_Hunter.mdl",
-// 	"models/v_models/weapons/v_claw_Smoker.mdl",
-// 	"models/v_models/weapons/v_claw_hulk.mdl",
-// };
-
 char g_SurvivorNames[8][] = {"Nick", "Rochelle", "Coach", "Ellis", "Bill", "Zoey", "Francis", "Louis"};
 char g_SurvivorPaths[8][] = {
 	"models/survivors/survivor_gambler.mdl",
@@ -138,6 +108,10 @@ ConVar g_cvTankHealth;
 ConVar g_cvTankChunkHp;
 ConVar g_cvSpawnInterval;
 ConVar g_cvMaxSI;
+ConVar g_cvAutoHard;
+ConVar g_cvJoinMenu;
+ConVar g_cvTeamLimit;
+ConVar g_cvOfferTakeover;
 
 int g_LogLevel;
 int g_MinPlayers;
@@ -151,10 +125,14 @@ int g_ExtraPlayers;
 int g_TankChunkHp;
 int g_SpawnInterval;
 int g_MaxSI;
+int g_AutoHard;
+int g_JoinMenu;
+int g_TeamLimit;
+int g_OfferTakeover;
 
 public Plugin myinfo= {
 	name = "ABM",
-	author = "Victor \"BUCKWANGS\" Gonzalez",
+	author = "Victor \"NgBUCKWANGS\" Gonzalez",
 	description = "A 5+ Player Enhancement Plugin for L4D2",
 	version = PLUGIN_VERSION,
 	url = "https://gitlab.com/vbgunz/ABM"
@@ -175,10 +153,8 @@ public OnPluginStart() {
 	HookEvent("player_team", QTeamHook);
 	HookEvent("player_bot_replace", QAfkHook);
 	HookEvent("bot_player_replace", QBakHook);
-
 	HookEvent("player_activate", PlayerActivateHook, EventHookMode_Pre);
 	HookEvent("player_connect", PlayerActivateHook, EventHookMode_Pre);
-
 	HookEvent("round_end", RoundFreezeEndHook, EventHookMode_Pre);
 	HookEvent("mission_lost", RoundFreezeEndHook, EventHookMode_Pre);
 	HookEvent("round_freeze_end", RoundFreezeEndHook, EventHookMode_Pre);
@@ -186,20 +162,20 @@ public OnPluginStart() {
 	HookEvent("round_start", RoundStartHook, EventHookMode_Pre);
 
 	RegAdminCmd("abm", MainMenuCmd, ADMFLAG_GENERIC);
-	RegAdminCmd("abm-menu", MainMenuCmd, ADMFLAG_GENERIC);
-	RegAdminCmd("abm-join", SwitchTeamCmd, ADMFLAG_GENERIC);
-	RegAdminCmd("abm-takeover", SwitchToBotCmd, ADMFLAG_GENERIC);
-	RegAdminCmd("abm-respawn", RespawnClientCmd, ADMFLAG_GENERIC);
-	RegAdminCmd("abm-model", AssignModelCmd, ADMFLAG_GENERIC);
-	RegAdminCmd("abm-strip", StripClientCmd, ADMFLAG_GENERIC);
-	RegAdminCmd("abm-teleport", TeleportClientCmd, ADMFLAG_GENERIC);
-	RegAdminCmd("abm-cycle", CycleBotsCmd, ADMFLAG_GENERIC);
-	RegAdminCmd("abm-reset", ResetCmd, ADMFLAG_GENERIC);
-	RegAdminCmd("abm-info", QuickClientPrintCmd, ADMFLAG_GENERIC);
-	RegAdminCmd("abm-mk", MkBotsCmd, ADMFLAG_GENERIC);
-	RegAdminCmd("abm-rm", RmBotsCmd, ADMFLAG_GENERIC);
-	RegConsoleCmd("takeover", SwitchToBotCmd);
-	RegConsoleCmd("join", SwitchTeamCmd);
+	RegAdminCmd("abm-menu", MainMenuCmd, ADMFLAG_GENERIC, "Menu: (Main ABM menu)");
+	RegAdminCmd("abm-join", SwitchTeamCmd, ADMFLAG_GENERIC, "Menu/Cmd: <TEAM> | <ID> <TEAM>");
+	RegAdminCmd("abm-takeover", SwitchToBotCmd, ADMFLAG_GENERIC, "Menu/Cmd: <ID> | <ID1> <ID2>");
+	RegAdminCmd("abm-respawn", RespawnClientCmd, ADMFLAG_GENERIC, "Menu/Cmd: <ID> [ID]");
+	RegAdminCmd("abm-model", AssignModelCmd, ADMFLAG_GENERIC, "Menu/Cmd: <MODEL> | <MODEL> <ID>");
+	RegAdminCmd("abm-strip", StripClientCmd, ADMFLAG_GENERIC, "Menu/Cmd: <ID> [SLOT]");
+	RegAdminCmd("abm-teleport", TeleportClientCmd, ADMFLAG_GENERIC, "Menu/Cmd: <ID1> <ID2>");
+	RegAdminCmd("abm-cycle", CycleBotsCmd, ADMFLAG_GENERIC, "Menu/Cmd: <TEAM> | <ID> <TEAM>");
+	RegAdminCmd("abm-reset", ResetCmd, ADMFLAG_GENERIC, "Cmd: (Use only in case of emergency)");
+	RegAdminCmd("abm-info", QuickClientPrintCmd, ADMFLAG_GENERIC, "Cmd: (Print some diagnostic information)");
+	RegAdminCmd("abm-mk", MkBotsCmd, ADMFLAG_GENERIC, "Cmd: <N|-N> <TEAM>");
+	RegAdminCmd("abm-rm", RmBotsCmd, ADMFLAG_GENERIC, "Cmd: <TEAM> | <N|-N> <TEAM>");
+	RegConsoleCmd("takeover", SwitchToBotCmd, "Menu/Cmd: <ID> | <ID1> <ID2>");
+	RegConsoleCmd("join", SwitchTeamCmd, "Menu/Cmd: <TEAM> | <ID> <TEAM>");
 
 	g_OS = GetOS();  // 0: Linux 1: Windows
 	g_QDB = new StringMap();
@@ -237,6 +213,10 @@ public OnPluginStart() {
 	g_cvExtraPlayers = CreateConVar("abm_extraplayers", "0", "Extra survivors to start the round with");
 	g_cvTankChunkHp = CreateConVar("abm_tankchunkhp", "2500", "Health chunk per survivor on 5+ missions");
 	g_cvSpawnInterval = CreateConVar("abm_spawninterval", "18", "SI full team spawn in (5 x N)");
+	g_cvAutoHard = CreateConVar("abm_autohard", "1", "0: Off 1: Non-Vs > 4 2: Non-Vs >= 1");
+	g_cvJoinMenu = CreateConVar("abm_joinmenu", "1", "0: Off 1: Admins only 2: Everyone");
+	g_cvTeamLimit = CreateConVar("abm_teamlimit", "16", "Humans on team limit");
+	g_cvOfferTakeover = CreateConVar("abm_offertakeover", "1", "0: Off 1: Survivors 2: Infected 3: All");
 
 	g_cvMaxSI = FindConVar("z_max_player_zombies");
 	SetConVarBounds(g_cvMaxSI, ConVarBound_Lower, true, 1.0);
@@ -261,6 +241,10 @@ public OnPluginStart() {
 	HookConVarChange(g_cvTankChunkHp, UpdateConVarsHook);
 	HookConVarChange(g_cvSpawnInterval, UpdateConVarsHook);
 	HookConVarChange(g_cvZoey, UpdateConVarsHook);
+	HookConVarChange(g_cvAutoHard, UpdateConVarsHook);
+	HookConVarChange(g_cvJoinMenu, UpdateConVarsHook);
+	HookConVarChange(g_cvTeamLimit, UpdateConVarsHook);
+	HookConVarChange(g_cvOfferTakeover, UpdateConVarsHook);
 
 	UpdateConVarsHook(g_cvLogLevel, "0", "0");
 	UpdateConVarsHook(g_cvMinPlayers, "4", "4");
@@ -273,36 +257,66 @@ public OnPluginStart() {
 	UpdateConVarsHook(g_cvTankChunkHp, "2500", "2500");
 	UpdateConVarsHook(g_cvSpawnInterval, "18", "18");
 	UpdateConVarsHook(g_cvZoey, g_sB, g_sB);
+	UpdateConVarsHook(g_cvAutoHard, "1", "1");
+	UpdateConVarsHook(g_cvJoinMenu, "1", "1");
+	UpdateConVarsHook(g_cvTeamLimit, "16", "16");
+	UpdateConVarsHook(g_cvOfferTakeover, "1", "1");
 
 	AutoExecConfig(true, "abm");
 	StartAD();
 }
 
+public OnEntityCreated(int ent, const char[] classname) {
+	Echo(1, "OnEntityCreated: %d %s", ent, classname);
+
+	if(classname[0] == 'f') {
+		bool gClip = !StrEqual(classname, "func_playerghostinfected_clip", false);
+		bool iClip = !StrEqual(classname, "func_playerinfected_clip", false);
+
+		if (!(gClip && iClip)) {
+			CreateTimer(1.0, KillEntTimer, EntIndexToEntRef(ent));
+		}
+	}
+}
+
+public Action KillEntTimer(Handle timer, any ref) {
+	Echo(1, "KillEntTimer: %d", ref);
+
+	int ent = EntRefToEntIndex(ref);
+	if (ent != INVALID_ENT_REFERENCE || IsValidEntity(ent)) {
+		AcceptEntityInput(ent, "kill");
+	}
+
+	return Plugin_Stop;
+}
+
 public Action L4D_OnGetScriptValueInt(const String:key[], &retVal) {
 	Echo(4, "L4D_OnGetScriptValueInt: %s, %d", key, retVal);
 
-	int val = retVal;
+	if (g_AutoHard > 0) {
+		int val = retVal;
 
-	if (StrEqual(key, "ShouldIgnoreClearStateForSpawn")) val = 1;
-	else if (StrEqual(key, "AlwaysAllowWanderers")) val = 1;
-	else if (StrEqual(key, "ClearedWandererRespawnChance")) val = 1;
-	else if (StrEqual(key, "EnforceFinaleNavSpawnRules")) val = 0;
-	else if (StrEqual(key, "DisallowThreatType")) val = 0;
-	else if (StrEqual(key, "ProhibitBosses")) val = 0;
-	else if (StrEqual(key, "MaxSpecials")) val = g_MaxSI;
-	else if (StrEqual(key, "DominatorLimit")) val = g_MaxSI;
-	else if (StrEqual(key, "BoomerLimit")) val = 4;
-	else if (StrEqual(key, "SmokerLimit")) val = 4;
-	else if (StrEqual(key, "HunterLimit")) val = 4;
-	else if (StrEqual(key, "ChargerLimit")) val = 4;
-	else if (StrEqual(key, "SpitterLimit")) val = 4;
-	else if (StrEqual(key, "JockeyLimit")) val = 4;
-	else if (StrEqual(key, "ZombieDontClear")) val = 1;
-// 	else if (StrEqual(key, "CommonLimit")) val = 30;
+		if (StrEqual(key, "ShouldIgnoreClearStateForSpawn")) val = 1;
+		else if (StrEqual(key, "AlwaysAllowWanderers")) val = 1;
+		else if (StrEqual(key, "ClearedWandererRespawnChance")) val = 1;
+		else if (StrEqual(key, "EnforceFinaleNavSpawnRules")) val = 0;
+		else if (StrEqual(key, "DisallowThreatType")) val = 0;
+		else if (StrEqual(key, "ProhibitBosses")) val = 0;
+		else if (StrEqual(key, "MaxSpecials")) val = g_MaxSI;
+		else if (StrEqual(key, "DominatorLimit")) val = g_MaxSI;
+		else if (StrEqual(key, "BoomerLimit")) val = 4;
+		else if (StrEqual(key, "SmokerLimit")) val = 4;
+		else if (StrEqual(key, "HunterLimit")) val = 4;
+		else if (StrEqual(key, "ChargerLimit")) val = 4;
+		else if (StrEqual(key, "SpitterLimit")) val = 4;
+		else if (StrEqual(key, "JockeyLimit")) val = 4;
+		else if (StrEqual(key, "ZombieDontClear")) val = 1;
+		//else if (StrEqual(key, "CommonLimit")) val = 30;
 
-	if (val != retVal) {
-		retVal = val;
-		return Plugin_Handled;
+		if (val != retVal) {
+			retVal = val;
+			return Plugin_Handled;
+		}
 	}
 
 	return Plugin_Continue;
@@ -457,50 +471,40 @@ public Action ADTimer(Handle timer) {
 		return Plugin_Continue;
 	}
 
-	int tankHealth;
-	static tankMp;
-	static fullVsSpawn;
-	static halfVsSpawn;
+	static lastSize;
+	bool autoWave;
 
-	if (!g_IsVs) {
-
-		fullVsSpawn = g_SpawnInterval / 2;
-		halfVsSpawn = fullVsSpawn / 2;
-
-		if (g_IsCoop) {
-			if (tankMp != teamSize) {
-				tankMp = teamSize;
-				tankHealth = teamSize * g_TankChunkHp;
-
-				if (tankHealth > 0) {
-					SetConVarInt(g_cvTankHealth, tankHealth);
-				}
-			}
-
-			if (teamSize > 4) {
-				if (g_ADInterval % g_SpawnInterval == 0) {
-					MkBots(teamSize * -1, 3);
-				}
-			}
+	if (g_IsCoop) {
+		if (lastSize != teamSize) {
+			lastSize = teamSize;
+			AutoSetTankHp();
 		}
+	}
 
+	// Auto difficulty here will not spawn SI in competitive modes.
+	// SI are unlocked (without spawn) see L4D_OnGetScriptValueInt.
+
+	switch (g_IsVs) {
+		case 1: autoWave = false;
+		case 0: autoWave = g_AutoHard == 2 || teamSize > 4 && g_AutoHard == 1;
+	}
+
+	if (autoWave || g_AssistedSpawning) {
 		if (g_ADInterval >= g_SpawnInterval) {
-			if (g_AssistedSpawning) {
-				if (g_ADInterval % fullVsSpawn == 0) {
-					Echo(1, " -- Assisting SI: Matching Full Team");
-					MkBots(teamSize * -1, 3);
-				}
+			if (g_ADInterval % g_SpawnInterval == 0) {
+				Echo(1, " -- Assisting SI %d: Matching Full Team", g_ADInterval);
+				MkBots(teamSize * -1, 3);
+			}
 
-				else if (g_ADInterval % halfVsSpawn == 0) {
-					Echo(1, " -- Assisting SI: Matching Half Team");
-					MkBots((teamSize / 2) * -1, 3);
-				}
+			else if (g_ADInterval % (g_SpawnInterval / 2) == 0) {
+				Echo(1, " -- Assisting SI %d: Matching Half Team", g_ADInterval);
+				MkBots((teamSize / 2) * -1, 3);
 			}
 		}
 	}
 
 	int onteam;
-	float nTakeOver = 0.1;
+	float nTakeover = 0.1;
 	g_AssistedSpawning = false;
 
 	for (int i = 1 ; i <= MaxClients ; i++) {
@@ -509,7 +513,7 @@ public Action ADTimer(Handle timer) {
 				if (!g_IsVs) {
 					g_AssistedSpawning = true;
 
-					if (GetClientTeam(i) <= 1 && !g_inspec) {
+					if (!IsPlayerAlive(i) && !g_queued && !g_inspec) {
 						g_QRecord.SetValue("queued", true, true);
 						QueueUp(i, 3);
 					}
@@ -524,8 +528,8 @@ public Action ADTimer(Handle timer) {
 			}
 
 			if (!g_inspec && onteam <= 1) {
-				CreateTimer(nTakeOver, TakeOverTimer, i);
-				nTakeOver += 0.1;
+				CreateTimer(nTakeover, TakeoverTimer, i);
+				nTakeover += 0.1;
 			}
 		}
 	}
@@ -571,6 +575,7 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
 
 	else if (StrEqual(name, "abm_tankchunkhp")) {
 		g_TankChunkHp = GetConVarInt(g_cvTankChunkHp);
+		AutoSetTankHp();
 	}
 
 	else if (StrEqual(name, "abm_spawninterval")) {
@@ -601,10 +606,45 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
 		g_MinPlayers = GetConVarInt(g_cvMinPlayers);
 	}
 
+	else if (StrEqual(name, "abm_autohard")) {
+		g_AutoHard = GetConVarInt(g_cvAutoHard);
+		AutoSetTankHp();
+	}
+
+	else if (StrEqual(name, "abm_joinmenu")) {
+		g_JoinMenu = GetConVarInt(g_cvJoinMenu);
+	}
+
+	else if (StrEqual(name, "abm_teamlimit")) {
+		g_TeamLimit = GetConVarInt(g_cvTeamLimit);
+	}
+
+	else if (StrEqual(name, "abm_offertakeover")) {
+		g_OfferTakeover = GetConVarInt(g_cvOfferTakeover);
+	}
+
 	switch(g_OS) {  // Zoey hates Windows :'(
 		case 0: g_Zoey = 5;
 		default: g_Zoey = GetConVarInt(g_cvZoey);
 	}
+}
+
+AutoSetTankHp() {
+	Echo(1, "AutoSetTankHp");
+
+	int tankHp;
+	int teamSize = CountTeamMates(2);
+
+	if (teamSize > 4 || g_AutoHard == 2) {
+		tankHp = teamSize * g_TankChunkHp;
+	}
+
+	if (g_AutoHard == 0 || tankHp == 0) {
+		GetConVarDefault(g_cvTankHealth, g_sB, sizeof(g_sB));
+		tankHp = StringToInt(g_sB);
+	}
+
+	SetConVarInt(g_cvTankHealth, tankHp);
 }
 
 public OnConfigsExecuted() {
@@ -620,15 +660,14 @@ public OnClientPostAdminCheck(int client) {
 			g_cisi[client] = g_QKey;
 			Echo(0, "AUTH ID: %s, ADDED TO QDB.", g_QKey);
 
-			if (IsAdmin(client)) {
+			if (g_JoinMenu == 2 || g_JoinMenu == 1 && IsAdmin(client)) {
 				GoIdle(client, 1);
 				menuArg0 = client;
 				SwitchTeamHandler(client, 1);
-				return;
 			}
 
-			if (CountTeamMates(2) >= 1) {
-				CreateTimer(0.1, TakeOverTimer, client);
+			else if (CountTeamMates(2) >= 1) {
+				CreateTimer(0.1, TakeoverTimer, client);
 			}
 		}
 	}
@@ -945,7 +984,9 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 
 	if (!g_IsVs && onteam == 3) {
 		if (g_AssistedSpawning) {
-			if (StrContains(g_pN, "Tank") >= 0) {
+
+			if (GetEntProp(target, Prop_Send, "m_zombieClass", target) == 8) {
+			//if (StrContains(g_pN, "Tank") >= 0) {
 				isTank = true;
 
 				for (int i = 1 ; i <= MaxClients ; i++) {
@@ -1017,19 +1058,34 @@ public OnDeathHook(Handle event, const char[] name, bool dontBroadcast) {
 		GetClientAbsOrigin(client, g_origin);
 		g_QRecord.SetValue("target", client, true);
 		g_QRecord.SetArray("origin", g_origin, sizeof(g_origin), true);
+		bool offerTakeover;
 
 		switch (g_onteam) {
 			case 3: {
 				if (!g_IsVs) {
-					SwitchTeam(client, 3);
+					switch (g_OfferTakeover) {
+						case 2, 3: {
+							QueueUp(client, 3);
+							GoIdle(client, 1);
+							offerTakeover = true;
+						}
+
+						default: SwitchTeam(client, 3);
+					}
 				}
 			}
 
 			case 2: {
-				GenericMenuCleaner(client);
-				menuArg0 = client;
-				SwitchToBotHandler(client, 1);
+				switch (g_OfferTakeover) {
+					case 1, 3: offerTakeover = true;
+				}
 			}
+		}
+
+		if (offerTakeover) {
+			GenericMenuCleaner(client);
+			menuArg0 = client;
+			SwitchToBotHandler(client, 1);
 		}
 	}
 }
@@ -1166,7 +1222,7 @@ RespawnClient(int client, int target=0) {
 
 	else if (GetQRecord(client)) {
 		if (g_onteam == 3) {
-			TakeOver(client, 3);
+			Takeover(client, 3);
 			return;
 		}
 	}
@@ -1385,70 +1441,14 @@ SwitchToBot(int client, int bot, bool si_ghost=true) {
 
 	if (client != bot && IsClientValid(bot)) {
 		switch (GetClientTeam(bot)) {
-			case 2: TakeOverBotSig(client, bot);
-			case 3: TakeOverZombieBotSig(client, bot, si_ghost);
+			case 2: TakeoverBotSig(client, bot);
+			case 3: TakeoverZombieBotSig(client, bot, si_ghost);
 		}
 	}
 }
 
-// SwitchToBot(int client, int bot, bool si_ghost=true) {
-// 	Echo(1, "SwitchToBot: %d %d %d", client, bot, si_ghost);
-//
-// 	if (client != bot && IsClientValid(bot)) {
-// 		int onteam = GetClientTeam(bot);
-//
-// 		if (GetQRecord(client)) {
-// 			GoIdle(client, 1);
-// 			SwitchToBotMiddleManWTF(client, bot, onteam, si_ghost);
-// 		}
-// 	}
-// }
-//
-// SwitchToBotMiddleManWTF(int client, int bot, int onteam, bool si_ghost=true) {
-// 	Echo(1, "SwitchToBotMiddleManWTF: %d %d %d %d", client, bot, onteam, si_ghost);
-//
-// 	DataPack pack;
-// 	CreateDataTimer(0.1, SwitchToBotTimer, pack);
-// 	pack.WriteCell(client);
-// 	pack.WriteCell(bot);
-// 	pack.WriteCell(onteam);
-// 	pack.WriteCell(si_ghost);
-// }
-//
-// public Action SwitchToBotTimer(Handle timer, Handle pack) {
-// 	Echo(1, "SwitchToBotTimer");
-//
-// 	int client;
-// 	int bot;
-// 	int onteam;
-// 	bool si_ghost;
-//
-// 	ResetPack(pack);
-// 	client = ReadPackCell(pack);
-// 	bot = ReadPackCell(pack);
-// 	onteam = ReadPackCell(pack);
-// 	si_ghost = ReadPackCell(pack);
-//
-// 	if (!GetQRecord(client)) {
-// 		return Plugin_Stop;
-// 	}
-//
-// 	if (IsClientValid(bot)) {
-// 		switch (onteam) {
-// 			case 2: TakeOverBotSig(client, bot);
-// 			case 3: TakeOverZombieBotSig(client, bot, si_ghost);
-// 		}
-// 	}
-//
-// // 	if (IsPlayerAlive(client)) {
-// // 		g_QRecord.SetValue("queued", false, true);
-// // 	}
-//
-// 	return Plugin_Stop;
-// }
-
-TakeOver(int client, int onteam) {
-	Echo(1, "TakeOver: %d %d", client, onteam);
+Takeover(int client, int onteam) {
+	Echo(1, "Takeover: %d %d", client, onteam);
 
 	if (GetQRecord(client)) {
 		if (IsClientValid(g_target) && IsFakeClient(g_target)) {
@@ -1485,8 +1485,8 @@ TakeOver(int client, int onteam) {
 	}
 }
 
-public Action TakeOverTimer(Handle timer, any client) {
-	Echo(3, "TakeOverTimer: %d", client);
+public Action TakeoverTimer(Handle timer, any client) {
+	Echo(3, "TakeoverTimer: %d", client);
 
 	if (CountTeamMates(2) <= 0) {
 		return Plugin_Handled;
@@ -1515,7 +1515,9 @@ public Action TakeOverTimer(Handle timer, any client) {
 			}
 		}
 
-		TakeOver(client, teamX);
+		if (CountTeamMates(teamX, 1) < g_TeamLimit) {
+			Takeover(client, teamX);
+		}
 	}
 
 	return Plugin_Handled;
@@ -1529,6 +1531,10 @@ int CountTeamMates(int onteam, int mtype=2) {
 	// mtype 1: counts only humans
 	// mtype 2: counts all players on team
 
+	if (g_ADFreeze) {
+		return 0;
+	}
+
 	int result;
 
 	if (mtype == 2) {
@@ -1536,7 +1542,7 @@ int CountTeamMates(int onteam, int mtype=2) {
 		result = GetTeamClientCount(onteam);
 
 		if (result > 0 && onteam == 2) {
-			g_MaxSI = result + 1;
+			g_MaxSI = result;
 
 			if (g_MaxSI != lastSize) {
 				SetConVarFloat(g_cvMaxSI, float(result));
@@ -1694,7 +1700,7 @@ SwitchTeam(int client, int onteam, char model[32]="") {
 						return;
 					}
 
-					TakeOver(client, onteam);
+					Takeover(client, onteam);
 				}
 			}
 		}
@@ -1882,14 +1888,6 @@ PrecacheModels() {
 			Echo(1, " - Precaching Survivor %s, retcode: %d", g_sB, retcode);
 		}
 	}
-
-// 	for (int i = 0 ; i < sizeof(g_InfectedPaths) ; i++) {
-// 		Format(g_sB, sizeof(g_sB), "%s", g_InfectedPaths[i]);
-// 		if (!IsModelPrecached(g_sB)) {  // this may not work for SI, why?
-// 			int retcode = PrecacheModel(g_sB);
-// 			Echo(1, " - Precaching Infected %s, retcode: %d", g_sB, retcode);
-// 		}
-// 	}
 }
 
 AssignModel(int client, char [] model) {
@@ -2048,8 +2046,8 @@ void State_TransitionSig(int client, int mode) {
 	}
 }
 
-bool TakeOverBotSig(int client, int bot) {
-	Echo(1, "TakeOverBotSig: %d %d", client, bot);
+bool TakeoverBotSig(int client, int bot) {
+	Echo(1, "TakeoverBotSig: %d %d", client, bot);
 
 	if (!GetQRecord(client)) {
 		return false;
@@ -2081,8 +2079,8 @@ bool TakeOverBotSig(int client, int bot) {
 	}
 
 	else {
-		PrintToChat(client, "[ABM] TakeOverBotSig Signature broken.");
-		SetFailState("[ABM] TakeOverBotSig Signature broken.");
+		PrintToChat(client, "[ABM] TakeoverBotSig Signature broken.");
+		SetFailState("[ABM] TakeoverBotSig Signature broken.");
 	}
 
 	g_QRecord.SetValue("lastid", bot, true);
@@ -2094,8 +2092,8 @@ bool TakeOverBotSig(int client, int bot) {
 	return false;
 }
 
-bool TakeOverZombieBotSig(int client, int bot, bool si_ghost) {
-	Echo(1, "TakeOverZombieBotSig: %d %d", client, bot);
+bool TakeoverZombieBotSig(int client, int bot, bool si_ghost) {
+	Echo(1, "TakeoverZombieBotSig: %d %d", client, bot);
 
 	if (!GetQRecord(client)) {
 		return false;
@@ -2131,8 +2129,8 @@ bool TakeOverZombieBotSig(int client, int bot, bool si_ghost) {
 	}
 
 	else {
-		PrintToChat(client, "[ABM] TakeOverZombieBotSig Signature broken.");
-		SetFailState("[ABM] TakeOverZombieBotSig Signature broken.");
+		PrintToChat(client, "[ABM] TakeoverZombieBotSig Signature broken.");
+		SetFailState("[ABM] TakeoverZombieBotSig Signature broken.");
 	}
 
 	g_QRecord.SetValue("lastid", bot, true);
@@ -2390,7 +2388,7 @@ public SwitchToBotHandler(int client, int level) {
                     }
 
                     if (GetClientManager(menuArg1) == 0) {
-                        SwitchToBot(menuArg0, menuArg1, false);
+						SwitchToBot(menuArg0, menuArg1, false);
                     }
                 }
 			}

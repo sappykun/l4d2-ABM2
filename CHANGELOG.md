@@ -1,4 +1,21 @@
 # ABM Change Log
+## [0.1.36] - 2017-21-02
+### Added
+- abm_autohard cvar 0: Off 1 (default): Non-Vs > 4 2: Non-Vs >= 1"
+- abm_joinmenu cvar 0: Off 1: (default) Admins only 2: Everyone
+- abm_teamlimit cvar (default is 16), humans on team before going spectator
+- abm_offertakeover cvar 0: Off 1 (default): Survivors 2: Infected 3: All
+- OnEntityCreated/KillEntTimer (contributed by Ludastar) removes SI barriers
+- Command arguments defined
+
+### Changed
+- L4D_OnGetScriptValueInt kicks in *if* abm_autohard >= 1
+- Rebalanced SI waves (90 seconds full wave, 45 seconds half wave)
+- Human on SI in non-Vs modes no longer speeds up any SI waves
+- abm_tankchunkhp and abm_autohard may manage Tank health interactively
+- CountTeamMates will return 0 until the round is unfrozen
+- Refactored TakeOver to Takeover (where possible)
+
 ## [0.1.35] - 2017-13-02
 ### Fixed
 - Mobs of SI far greater than the size of the surviving team
