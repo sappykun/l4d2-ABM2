@@ -203,7 +203,7 @@ public OnPluginStart() {
 	g_IsCoop = StrEqual(g_GameMode, "coop");
 
 	CreateConVar("abm_version", PLUGIN_VERSION, "ABM plugin version", FCVAR_DONTRECORD);
-	g_cvLogLevel = CreateConVar("abm_loglevel", "0", "Logging level of the plugin, 0 is off, up to 4");
+	g_cvLogLevel = CreateConVar("abm_loglevel", "0", "Development logging level 0: Off, 4: Max");
 	g_cvMinPlayers = CreateConVar("abm_minplayers", "4", "Pruning extra survivors stops at this size");
 	g_cvPrimaryWeapon = CreateConVar("abm_primaryweapon", "shotgun_chrome", "5+ survivor primary weapon");
 	g_cvSecondaryWeapon = CreateConVar("abm_secondaryweapon", "baseball_bat", "5+ survivor secondary weapon");
