@@ -979,57 +979,51 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 	static oldTank;
 	int newTank;
 	int onteam = GetClientTeam(target);
-	static ghostTank;  // this is the extra Tank that just ghosts and dies
-	bool isTank = false;
 
-	if (!g_IsVs && onteam == 3) {
-		if (g_AssistedSpawning) {
+	if (onteam == 3) {
+		if (!g_IsVs) {
+			if (g_AssistedSpawning) {
+				int zClass = GetEntProp(target, Prop_Send, "m_zombieClass", target);
 
-			if (GetEntProp(target, Prop_Send, "m_zombieClass", target) == 8) {
-			//if (StrContains(g_pN, "Tank") >= 0) {
-				isTank = true;
+				if (zClass == 8) {
+					for (int i = 1 ; i <= MaxClients ; i++) {
+						if (GetQRecord(i) && g_onteam == 3 && !g_inspec) {
+							if (GetEntProp(i, Prop_Send, "m_zombieClass", i) != 8) {
 
-				for (int i = 1 ; i <= MaxClients ; i++) {
-					if (GetQRecord(i) && g_onteam == 3 && !g_inspec) {
-						if (GetEntProp(i, Prop_Send, "m_zombieClass", i) != 8) {
+								if (newTank == 0 || i > oldTank) {
+									newTank = i;
+								}
 
-							if (newTank == 0 || i > oldTank) {
-								newTank = i;
-							}
-
-							if (oldTank != i) {
-								oldTank = i;
-								SwitchToBot(i, target);
-								return;
+								if (oldTank != i) {
+									oldTank = i;
+									SwitchToBot(i, target);
+									return;
+								}
 							}
 						}
 					}
 				}
-			}
 
-			if (IsClientValid(newTank)) {
-				SwitchToBot(newTank, target);
-				return;
-			}
+				if (IsClientValid(newTank)) {
+					SwitchToBot(newTank, target);
+					return;
+				}
 
-			else if (isTank) {
-				switch (IsClientValid(ghostTank)) {
-					case 1: {
-						ForcePlayerSuicide(ghostTank);
-						ghostTank = 0;
-					}
+				else if (zClass == 8) {
+					static bool altTank;
 
-					case 0: {
+					if (!altTank) {
 						AddInfected(0, "Tank");
-						ghostTank = target;
 					}
+
+					altTank = !altTank;
 				}
 			}
-		}
 
-		if (g_iQueue.Length > 0) {
-			SwitchToBot(g_iQueue.Get(0), target);
-			return;
+			if (g_iQueue.Length > 0) {
+				SwitchToBot(g_iQueue.Get(0), target);
+				return;
+			}
 		}
 	}
 
