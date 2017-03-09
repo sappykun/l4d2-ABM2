@@ -1,4 +1,12 @@
 # ABM Change Log
+## [0.1.37] - 2017-09-03
+### Added
+- abm_spawninterval 0 will turn off SI waves
+
+### Changed
+- Human activation of stasis Tanks in non-competitive mode
+- README description of locking/unlocking cvars and white space
+
 ## [0.1.36] - 2017-21-02
 ### Added
 - abm_autohard cvar 0: Off 1 (default): Non-Vs > 4 2: Non-Vs >= 1"

@@ -147,11 +147,11 @@ Administators can put anyone onto any team and into any bot using either menus o
 
 ### Locking and Unlocking Cvars
 
-During a game, changing a plugin cvar that differs from the value in its cfg will normally get reset on map change. ABM provides a way to lock and unlock cvars that will last across map changes. When setting an ABM cvar, prefix it with -l (for lock) or -u (for unlock).
+During a game, changing a plugin cvar that differs from the value in its cfg will normally get reset on map change. ABM provides a way to lock and unlock cvars that will last across map changes. When setting an ABM cvar, prefix it with -l (for lock) or -u (for unlock). __It is safe to separate the switch (-l or -u) with white space in a terminal but the universal approach is no white space between the switch and its value__.
 
 - abm_minplayers 1  // revert to cfg value on next map
-- abm_minplayers -l 1  // lock this value until we unlock it
-- abm_minplayers -u 1  // unlock back to default behavior
+- abm_minplayers -l1  // lock this value until we unlock it
+- abm_minplayers -u1  // unlock back to default behavior
 
 ### Cvars Explained
 Some cvars are self explanatory and those that are not are addressed below.
@@ -331,9 +331,9 @@ Due to a bug on Windows, spawning in a Zoey can crash the server. This value is 
 - Q. How do I get a list of inventory items for survivors?
 	- A. ```sm_dump_classes sm_dump_classes.txt (search for - weapon_)```
 - Q. How can I enforce a change to a cvar without editing the cfg?
-	- A. Use the -l switch (l for lock) e.g., ```abm_minplayers -l 2```
+	- A. Use the -l switch (l for lock) e.g., ```abm_minplayers -l2```
 - Q. I locked a cvar, how do I unlock it?
-	- A. Use the -u switch (u for unlock) e.g., ```abm_minplayers -u 4```
+	- A. Use the -u switch (u for unlock) e.g., ```abm_minplayers -u4```
 - Q. Do I always have to lock/unlock cvars?
 	- A. Lock cvars when you require persistence (until unlock/restart)
 	- A. Unlock cvars (only if they're locked) and changes are temporary

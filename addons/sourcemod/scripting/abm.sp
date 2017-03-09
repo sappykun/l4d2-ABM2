@@ -33,7 +33,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.36"
+#define PLUGIN_VERSION "0.1.37"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -47,6 +47,9 @@ int g_OS;  // no one wants to do OS specific stuff but a bug on Windows crashes 
 #define menuArg0 g_menuItems[client][0]  // GetItem(1...)
 #define menuArg1 g_menuItems[client][1]  // GetItem(2...)
 g_menuItems[MAXPLAYERS + 1][2];
+
+g_Tanks[MAXPLAYERS + 1];  // client to Tank array (which client gets which Tank)
+Handle g_TankTimers[MAXPLAYERS + 1];  // A timer before client gets the Tank
 
 // menu tracking
 #define g_callBacks g_menuStack[client]
@@ -490,15 +493,17 @@ public Action ADTimer(Handle timer) {
 	}
 
 	if (autoWave || g_AssistedSpawning) {
-		if (g_ADInterval >= g_SpawnInterval) {
-			if (g_ADInterval % g_SpawnInterval == 0) {
-				Echo(1, " -- Assisting SI %d: Matching Full Team", g_ADInterval);
-				MkBots(teamSize * -1, 3);
-			}
+		if (g_SpawnInterval > 0) {
+			if (g_ADInterval >= g_SpawnInterval) {
+				if (g_ADInterval % g_SpawnInterval == 0) {
+					Echo(1, " -- Assisting SI %d: Matching Full Team", g_ADInterval);
+					MkBots(teamSize * -1, 3);
+				}
 
-			else if (g_ADInterval % (g_SpawnInterval / 2) == 0) {
-				Echo(1, " -- Assisting SI %d: Matching Half Team", g_ADInterval);
-				MkBots((teamSize / 2) * -1, 3);
+				else if (g_ADInterval % (g_SpawnInterval / 2) == 0) {
+					Echo(1, " -- Assisting SI %d: Matching Half Team", g_ADInterval);
+					MkBots((teamSize / 2) * -1, 3);
+				}
 			}
 		}
 	}
@@ -976,47 +981,48 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 		return;
 	}
 
-	static oldTank;
-	int newTank;
+	int client;
 	int onteam = GetClientTeam(target);
 
 	if (onteam == 3) {
 		if (!g_IsVs) {
 			if (g_AssistedSpawning) {
-				int zClass = GetEntProp(target, Prop_Send, "m_zombieClass", target);
-
+				int zClass = GetEntProp(target, Prop_Send, "m_zombieClass");
 				if (zClass == 8) {
-					for (int i = 1 ; i <= MaxClients ; i++) {
+
+					int j = 1;
+					static i = 1;
+
+					for ( ; i <= MaxClients + 1 ; i++) {
+						if (i == MaxClients + 1) {
+							i = 1;
+						}
+
 						if (GetQRecord(i) && g_onteam == 3 && !g_inspec) {
-							if (GetEntProp(i, Prop_Send, "m_zombieClass", i) != 8) {
 
-								if (newTank == 0 || i > oldTank) {
-									newTank = i;
-								}
+							if (client == 0) {
+								client = i;
+							}
 
-								if (oldTank != i) {
-									oldTank = i;
-									SwitchToBot(i, target);
-									return;
-								}
+							if (GetEntProp(i, Prop_Send, "m_zombieClass") != 8) {
+								client = i;
+								i++;
+								break;
 							}
 						}
-					}
-				}
 
-				if (IsClientValid(newTank)) {
-					SwitchToBot(newTank, target);
-					return;
-				}
-
-				else if (zClass == 8) {
-					static bool altTank;
-
-					if (!altTank) {
-						AddInfected(0, "Tank");
+						if (j++ >= MaxClients) {
+							i++;
+							break;
+						}
 					}
 
-					altTank = !altTank;
+					g_Tanks[client] = target;
+					if (IsClientValid(client) && g_TankTimers[client] == null) {
+						g_TankTimers[client] = CreateTimer(
+							1.0, TankReadyTimer, client, TIMER_REPEAT
+						);
+					}
 				}
 			}
 
@@ -1031,6 +1037,34 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 		CreateTimer(0.2, AutoModelTimer, target);
 		CreateTimer(0.4, OnSpawnHookTimer, target);
 	}
+}
+
+public Action TankReadyTimer(Handle timer, any client) {
+	Echo(3, "TankReadyTimer: %d", client);
+
+	static times[MAXPLAYERS + 1] = {15, ...};
+
+	if (times[client] >= 1) {
+		PrintHintText(client, "PREPARING TANK: %d", times[client]);
+		times[client]--;
+		return Plugin_Continue;
+	}
+
+	if (IsClientValid(client)) {
+		int target = g_Tanks[client];
+
+		if (IsClientValid(target) && IsFakeClient(target)) {
+			if (GetEntProp(client, Prop_Send, "m_ghostSpawnState") <= 2) {
+				SetEntProp(client, Prop_Send, "m_isGhost", 0);
+			}
+
+			SwitchToBot(client, target);
+		}
+	}
+
+	times[client] = 15;
+	g_TankTimers[client] = null;
+	return Plugin_Stop;
 }
 
 public Action OnSpawnHookTimer(Handle timer, any target) {
