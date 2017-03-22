@@ -33,7 +33,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.37"
+#define PLUGIN_VERSION "0.1.38"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -47,9 +47,6 @@ int g_OS;  // no one wants to do OS specific stuff but a bug on Windows crashes 
 #define menuArg0 g_menuItems[client][0]  // GetItem(1...)
 #define menuArg1 g_menuItems[client][1]  // GetItem(2...)
 g_menuItems[MAXPLAYERS + 1][2];
-
-g_Tanks[MAXPLAYERS + 1];  // client to Tank array (which client gets which Tank)
-Handle g_TankTimers[MAXPLAYERS + 1];  // A timer before client gets the Tank
 
 // menu tracking
 #define g_callBacks g_menuStack[client]
@@ -999,29 +996,22 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 						}
 
 						if (GetQRecord(i) && g_onteam == 3 && !g_inspec) {
-
-							if (client == 0) {
-								client = i;
-							}
-
 							if (GetEntProp(i, Prop_Send, "m_zombieClass") != 8) {
 								client = i;
 								i++;
 								break;
 							}
-						}
 
-						if (j++ >= MaxClients) {
-							i++;
-							break;
+							if (j++ >= MaxClients) {
+								i++;
+								break;
+							}
 						}
 					}
 
-					g_Tanks[client] = target;
-					if (IsClientValid(client) && g_TankTimers[client] == null) {
-						g_TankTimers[client] = CreateTimer(
-							1.0, TankReadyTimer, client, TIMER_REPEAT
-						);
+					switch (IsClientValid(client)) {
+						case 1: SwitchToBot(client, target);
+						case 0: CreateTimer(1.0, TankAssistTimer, target, TIMER_REPEAT);
 					}
 				}
 			}
@@ -1039,31 +1029,77 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 	}
 }
 
-public Action TankReadyTimer(Handle timer, any client) {
-	Echo(3, "TankReadyTimer: %d", client);
+public Action TankAssistTimer(Handle timer, any client) {
+	Echo(3, "TankAssistTimer: %d", client);
 
-	static times[MAXPLAYERS + 1] = {15, ...};
+	/*
+	 * Human players on the infected team in modes that do not officially
+	 * support them, can get Tanks stuck in "stasis" until they die. This
+	 * function works around the issue by watching Tanks for movement. If
+	 * a Tank does not move in 11 seconds, it is replaced with another.
+	 */
 
-	if (times[client] >= 1) {
-		PrintHintText(client, "PREPARING TANK: %d", times[client]);
-		times[client]--;
-		return Plugin_Continue;
-	}
+	float origin[3];
+	static const float nullOrigin[3];
+	static times[MAXPLAYERS + 1] = {11, ...};
+	static float origins[MAXPLAYERS + 1][3];
+	static i;
 
 	if (IsClientValid(client)) {
-		int target = g_Tanks[client];
+		i = times[client]--;
 
-		if (IsClientValid(target) && IsFakeClient(target)) {
+		if (i == 11) {
+			GetClientAbsOrigin(client, origins[client]);
+			return Plugin_Continue;
+		}
+
+		else if (i >= 0) {
+			GetClientAbsOrigin(client, origin);
+
+			if (origin[0] == origins[client][0]) {
+				if (i == 0) {
+					TeleportEntity(client, nullOrigin, NULL_VECTOR, NULL_VECTOR);
+					ForcePlayerSuicide(client);
+					AddInfected(0, "tank");
+				}
+
+				return Plugin_Continue;
+			}
+		}
+	}
+
+	i = times[client] = 11;
+	return Plugin_Stop;
+}
+
+public Action ForceSpawnTimer(Handle timer, any client) {
+	Echo(3, "ForceSpawnTimer: %d", client);
+
+	static times[MAXPLAYERS + 1] = {20, ...};
+	static i;
+
+	if (IsClientValid(client)) {
+		i = times[client]--;
+
+		if (GetEntProp(client, Prop_Send, "m_isGhost") == 1) {
+			if (i >= 1) {
+				PrintHintText(client, "FORCING SPAWN IN: %d", i);
+				return Plugin_Continue;
+			}
+
 			if (GetEntProp(client, Prop_Send, "m_ghostSpawnState") <= 2) {
 				SetEntProp(client, Prop_Send, "m_isGhost", 0);
 			}
 
-			SwitchToBot(client, target);
+			return Plugin_Continue;
+		}
+
+		if (GetClientTeam(client) == 3) {
+			PrintHintText(client, "KILL ALL HUMANS");
 		}
 	}
 
-	times[client] = 15;
-	g_TankTimers[client] = null;
+	i = times[client] = 20;
 	return Plugin_Stop;
 }
 
@@ -2147,6 +2183,10 @@ bool TakeoverZombieBotSig(int client, int bot, bool si_ghost) {
 
 				if (si_ghost) {
 					State_TransitionSig(client, 8);
+
+					if (GetEntProp(client, Prop_Send, "m_zombieClass") == 8) {
+						CreateTimer(1.0, ForceSpawnTimer, client, TIMER_REPEAT);
+					}
 				}
 
 				Unqueue(client);
