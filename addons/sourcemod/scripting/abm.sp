@@ -2,7 +2,7 @@
 
 /*
 ABM a SourceMod L4D2 Plugin
-Copyright (C) 2016  Victor NgBUCKWANGS Gonzalez
+Copyright (C) 2016-2017  Victor "NgBUCKWANGS" Gonzalez
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -33,7 +33,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.42"
+#define PLUGIN_VERSION "0.1.43"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -86,7 +86,6 @@ bool g_inspec = false;              // g_QDB check client's specator mode
 char g_cisi[MAXPLAYERS + 1][64];    // g_QDB client Id to steam Id array
 Handle g_AD;                        // Assistant Director Timer
 
-char g_GameMode[16];
 bool g_IsVs = false;
 bool g_IsCoop = false;
 bool g_AssistedSpawning = false;
@@ -104,6 +103,7 @@ ConVar g_cvHealItem;
 ConVar g_cvConsumable;
 ConVar g_cvZoey;
 ConVar g_cvExtraPlayers;
+ConVar g_cvGameMode;
 ConVar g_cvTankHealth;
 ConVar g_cvTankChunkHp;
 ConVar g_cvSpawnInterval;
@@ -199,6 +199,7 @@ public OnPluginStart() {
 		}
 	}
 
+	g_cvGameMode = FindConVar("mp_gamemode");
 	g_cvTankHealth = FindConVar("z_tank_health");
 	CreateConVar("abm_version", PLUGIN_VERSION, "ABM plugin version", FCVAR_DONTRECORD);
 	g_cvLogLevel = CreateConVar("abm_loglevel", "0", "Development logging level 0: Off, 4: Max");
@@ -216,7 +217,7 @@ public OnPluginStart() {
 	g_cvJoinMenu = CreateConVar("abm_joinmenu", "1", "0: Off 1: Admins only 2: Everyone");
 	g_cvTeamLimit = CreateConVar("abm_teamlimit", "16", "Humans on team limit");
 	g_cvOfferTakeover = CreateConVar("abm_offertakeover", "1", "0: Off 1: Survivors 2: Infected 3: All");
-
+	
 	g_cvMaxSI = FindConVar("z_max_player_zombies");
 	SetConVarBounds(g_cvMaxSI, ConVarBound_Lower, true, 1.0);
 	SetConVarBounds(g_cvMaxSI, ConVarBound_Upper, true, 24.0);
@@ -245,6 +246,7 @@ public OnPluginStart() {
 	HookConVarChange(g_cvJoinMenu, UpdateConVarsHook);
 	HookConVarChange(g_cvTeamLimit, UpdateConVarsHook);
 	HookConVarChange(g_cvOfferTakeover, UpdateConVarsHook);
+	HookConVarChange(g_cvGameMode, UpdateConVarsHook);
 
 	UpdateConVarsHook(g_cvLogLevel, "0", "0");
 	UpdateConVarsHook(g_cvMinPlayers, "4", "4");
@@ -427,11 +429,6 @@ bool StartAD() {
 
 public Action ADTimer(Handle timer) {
 	Echo(3, "ADTimer");
-
-	// todo: detect this on demand than read it every 5 seconds?
-	FindConVar("mp_gamemode").GetString(g_GameMode, sizeof(g_GameMode));
-	g_IsVs = (StrEqual(g_GameMode, "versus") || StrEqual(g_GameMode, "scavenge"));
-	g_IsCoop = StrEqual(g_GameMode, "coop");  // !g_IsVs
 	
 	if (g_ADFreeze) {
 		for (int i = 1 ; i <= MaxClients ; i++) {
@@ -633,6 +630,11 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
 
 	else if (StrEqual(name, "abm_offertakeover")) {
 		g_OfferTakeover = GetConVarInt(g_cvOfferTakeover);
+	}
+	
+	else if (StrEqual(name, "mp_gamemode")) {
+		g_IsVs = (StrEqual(newCv, "versus") || StrEqual(newCv, "scavenge"));
+		g_IsCoop = !g_IsVs;
 	}
 
 	switch(g_OS) {  // Zoey hates Windows :'(
