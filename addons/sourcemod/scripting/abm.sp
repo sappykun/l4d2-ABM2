@@ -33,7 +33,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.38"
+#define PLUGIN_VERSION "0.1.42"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -58,7 +58,7 @@ StringMap g_QDB;      // holds player records linked by STEAM_ID
 StringMap g_QRecord;  // changes to an individual STEAM_ID mapping
 StringMap g_Cvars;
 
-char g_InfectedNames[11][] = {"Boomer", "Smoker", "Boomer", "Hunter", "Spitter", "Jockey", "Charger", "Boomer", "Tank", "Boomer", "Witch"};
+char g_InfectedNames[6][] = {"Boomer", "Smoker", "Hunter", "Spitter", "Jockey", "Charger"};
 char g_SurvivorNames[8][] = {"Nick", "Rochelle", "Coach", "Ellis", "Bill", "Zoey", "Francis", "Louis"};
 char g_SurvivorPaths[8][] = {
 	"models/survivors/survivor_gambler.mdl",
@@ -109,6 +109,7 @@ ConVar g_cvTankChunkHp;
 ConVar g_cvSpawnInterval;
 ConVar g_cvMaxSI;
 ConVar g_cvAutoHard;
+ConVar g_cvUnlockSI;
 ConVar g_cvJoinMenu;
 ConVar g_cvTeamLimit;
 ConVar g_cvOfferTakeover;
@@ -126,6 +127,7 @@ int g_TankChunkHp;
 int g_SpawnInterval;
 int g_MaxSI;
 int g_AutoHard;
+int g_UnlockSI;
 int g_JoinMenu;
 int g_TeamLimit;
 int g_OfferTakeover;
@@ -198,10 +200,6 @@ public OnPluginStart() {
 	}
 
 	g_cvTankHealth = FindConVar("z_tank_health");
-	FindConVar("mp_gamemode").GetString(g_GameMode, sizeof(g_GameMode));
-	g_IsVs = (StrEqual(g_GameMode, "versus") || StrEqual(g_GameMode, "scavenge"));
-	g_IsCoop = StrEqual(g_GameMode, "coop");
-
 	CreateConVar("abm_version", PLUGIN_VERSION, "ABM plugin version", FCVAR_DONTRECORD);
 	g_cvLogLevel = CreateConVar("abm_loglevel", "0", "Development logging level 0: Off, 4: Max");
 	g_cvMinPlayers = CreateConVar("abm_minplayers", "4", "Pruning extra survivors stops at this size");
@@ -212,8 +210,9 @@ public OnPluginStart() {
 	g_cvConsumable = CreateConVar("abm_consumable", "adrenaline", "5+ survivor consumable item");
 	g_cvExtraPlayers = CreateConVar("abm_extraplayers", "0", "Extra survivors to start the round with");
 	g_cvTankChunkHp = CreateConVar("abm_tankchunkhp", "2500", "Health chunk per survivor on 5+ missions");
-	g_cvSpawnInterval = CreateConVar("abm_spawninterval", "18", "SI full team spawn in (5 x N)");
+	g_cvSpawnInterval = CreateConVar("abm_spawninterval", "36", "SI full team spawn in (5 x N)");
 	g_cvAutoHard = CreateConVar("abm_autohard", "1", "0: Off 1: Non-Vs > 4 2: Non-Vs >= 1");
+	g_cvUnlockSI = CreateConVar("abm_unlocksi", "1", "0: Off 1: On (Requires Left 4 Downtown 2)");
 	g_cvJoinMenu = CreateConVar("abm_joinmenu", "1", "0: Off 1: Admins only 2: Everyone");
 	g_cvTeamLimit = CreateConVar("abm_teamlimit", "16", "Humans on team limit");
 	g_cvOfferTakeover = CreateConVar("abm_offertakeover", "1", "0: Off 1: Survivors 2: Infected 3: All");
@@ -242,6 +241,7 @@ public OnPluginStart() {
 	HookConVarChange(g_cvSpawnInterval, UpdateConVarsHook);
 	HookConVarChange(g_cvZoey, UpdateConVarsHook);
 	HookConVarChange(g_cvAutoHard, UpdateConVarsHook);
+	HookConVarChange(g_cvUnlockSI, UpdateConVarsHook);
 	HookConVarChange(g_cvJoinMenu, UpdateConVarsHook);
 	HookConVarChange(g_cvTeamLimit, UpdateConVarsHook);
 	HookConVarChange(g_cvOfferTakeover, UpdateConVarsHook);
@@ -258,6 +258,7 @@ public OnPluginStart() {
 	UpdateConVarsHook(g_cvSpawnInterval, "18", "18");
 	UpdateConVarsHook(g_cvZoey, g_sB, g_sB);
 	UpdateConVarsHook(g_cvAutoHard, "1", "1");
+	UpdateConVarsHook(g_cvUnlockSI, "1", "1");
 	UpdateConVarsHook(g_cvJoinMenu, "1", "1");
 	UpdateConVarsHook(g_cvTeamLimit, "16", "16");
 	UpdateConVarsHook(g_cvOfferTakeover, "1", "1");
@@ -293,7 +294,7 @@ public Action KillEntTimer(Handle timer, any ref) {
 public Action L4D_OnGetScriptValueInt(const String:key[], &retVal) {
 	Echo(4, "L4D_OnGetScriptValueInt: %s, %d", key, retVal);
 
-	if (g_AutoHard > 0) {
+	if (g_UnlockSI > 0) {
 		int val = retVal;
 
 		if (StrEqual(key, "ShouldIgnoreClearStateForSpawn")) val = 1;
@@ -427,6 +428,11 @@ bool StartAD() {
 public Action ADTimer(Handle timer) {
 	Echo(3, "ADTimer");
 
+	// todo: detect this on demand than read it every 5 seconds?
+	FindConVar("mp_gamemode").GetString(g_GameMode, sizeof(g_GameMode));
+	g_IsVs = (StrEqual(g_GameMode, "versus") || StrEqual(g_GameMode, "scavenge"));
+	g_IsCoop = StrEqual(g_GameMode, "coop");  // !g_IsVs
+	
 	if (g_ADFreeze) {
 		for (int i = 1 ; i <= MaxClients ; i++) {
 			if (IsClientConnected(i)) {
@@ -611,6 +617,10 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
 	else if (StrEqual(name, "abm_autohard")) {
 		g_AutoHard = GetConVarInt(g_cvAutoHard);
 		AutoSetTankHp();
+	}
+
+	else if (StrEqual(name, "abm_unlocksi")) {
+		g_UnlockSI = GetConVarInt(g_cvUnlockSI);
 	}
 
 	else if (StrEqual(name, "abm_joinmenu")) {
@@ -991,18 +1001,17 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 					static i = 1;
 
 					for ( ; i <= MaxClients + 1 ; i++) {
-						if (i == MaxClients + 1) {
+						if (j++ == MaxClients + 1) {  // join 3 Tank requires +1
+							return;
+						}
+						
+						if (i > MaxClients) {
 							i = 1;
 						}
-
+						
 						if (GetQRecord(i) && g_onteam == 3 && !g_inspec) {
 							if (GetEntProp(i, Prop_Send, "m_zombieClass") != 8) {
 								client = i;
-								i++;
-								break;
-							}
-
-							if (j++ >= MaxClients) {
 								i++;
 								break;
 							}
@@ -1081,6 +1090,10 @@ public Action ForceSpawnTimer(Handle timer, any client) {
 	if (IsClientValid(client)) {
 		i = times[client]--;
 
+		if (GetEntProp(client, Prop_Send, "m_zombieClass") != 8) {
+			return Plugin_Stop;
+		}
+		
 		if (GetEntProp(client, Prop_Send, "m_isGhost") == 1) {
 			if (i >= 1) {
 				PrintHintText(client, "FORCING SPAWN IN: %d", i);
@@ -1401,28 +1414,29 @@ GhostsModeProtector(int state) {
 	}
 }
 
-CleanSIName(char model[32], bool randomize=true) {
-	Echo(1, "CleanSIName: %s %d", model, randomize);
+void CleanSIName(char model[32]) {
+	Echo(1, "CleanSIName: %s", model);
 
-	int i = GetModelIndexByName(model, 3);
-	static char infected[6][] = {"Boomer", "Smoker", "Hunter", "Spitter", "Jockey", "Charger"};
+	int i;
+	static char tmpModel[32];
 
-
-	switch (model[0] != EOS && i >= 0) {
-		case 1: {
-			model = g_InfectedNames[i];
-		}
-
-		default: {
-			if (randomize) {
-				i = GetRandomInt(0, sizeof(infected) - 1);
-				model = infected[i];
-			}
-
-			else {
-				model = "";
+	if (model[0] != EOS) {
+		for (i = 0; i < sizeof(g_InfectedNames); i++) {
+			tmpModel = g_InfectedNames[i];
+			if (StrContains(tmpModel, model, false) == 0) {
+				model = tmpModel;
+				return;
 			}
 		}
+		
+		if (StrContains("Tank", model, false) == 0) {
+			model = "Tank";
+		}
+	}
+	
+	else {
+		i = GetRandomInt(0, sizeof(g_InfectedNames) - 1);
+		model = g_InfectedNames[i];
 	}
 }
 
@@ -1728,8 +1742,15 @@ CycleBots(int client, int onteam) {
 
 SwitchTeam(int client, int onteam, char model[32]="") {
 	Echo(1, "SwitchTeam: %d %d", client, onteam);
-
+	
 	if (GetQRecord(client)) {
+		
+		if (GetClientTeam(client) >= 2) {
+			if (onteam == 2 && onteam == g_onteam) {
+				return;  // keep survivors from rejoining survivors
+			}
+		}
+		
 		switch (onteam) {
 			case 0: GoIdle(client, 0);
 			case 1: GoIdle(client, 1);
@@ -2278,6 +2299,7 @@ public Action SwitchTeamCmd(int client, args) {
 	char model[32];
 	GetCmdArg(args, model, sizeof(model));
 	int result = StringToInt(model);
+	CleanSIName(model);
 
 	if (args == 1 || args == 2 && result == 0) {
 		menuArg0 = client;

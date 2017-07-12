@@ -68,7 +68,7 @@ The following is optional but if you plan on using ABM in competitive modes with
 "abm-info"
  - Cmd: (Print some diagnostic information)
 "abm-join"
- - Menu/Cmd: <TEAM> | <ID> <TEAM>
+ - Menu/Cmd: <TEAM> | <ID> <TEAM> | <ID> 3 <SI>
 "abm-menu"
  - Menu: (Main ABM menu)
 "abm-mk"
@@ -86,7 +86,7 @@ The following is optional but if you plan on using ABM in competitive modes with
 "abm-takeover"
  - Menu/Cmd: <ID> | <ID1> <ID2>
 "abm-teleport"
- - Menu/Cmd: <ID1> <ID2>
+ - Menu/Cmd: <ID1> <ID2>>
 ```
 
 Menus are available only in game and require zero arguments. If you're using commands anything in <> is required. Anything in [] is optional. Anything split with a | is an either or. Menus are great if you're in game and commands are the only option if you're managing a game from an SSH/terminal session. Some commands make handy binds e.g., ```bind n "abm-cycle 2"```.
@@ -105,9 +105,9 @@ Menus are available only in game and require zero arguments. If you're using com
 Notice how in the second bullet item, TEAM is in argument position 1 and in the third bullet item, the client ID is in argument position 1 and TEAM in argument position 2. ```<TEAM> | <ID> <TEAM>.```
 
 ### Note on Menus/Commands
-Menus that are shared between admins and non-admins e.g., ```!takeover``` differ slightly. Admins will get a choose player menu where as non-admins do not. Admins will have an option to takeover infected bots whereas non-admins (not on team 3) do not.  Administrators on death will have the ability to take over any available bot from any team whereas non-admins are only offererd bots of their own team.
+Menus that are shared between admins and non-admins e.g., ```!takeover``` differ slightly. Admins will get a choose player menu where as non-admins do not. Admins will have an option to takeover infected bots whereas non-admins (not on team 3) do not.  Administrators on death will have the ability to take over any available bot from any team whereas non-admins are only offered bots of their own team.
 
-Administators can put anyone onto any team and into any bot using either menus or commands. Be careful whom you give admin with ABM as ABM provides quite a bit of power. Admins can go onto the special infected team in any mode. An admin just having fun can ruin an otherwise great game for unsuspecting players. It should go without saying, respect your players.
+Administrators can put anyone onto any team and into any bot using either menus or commands. Be careful whom you give admin with ABM as ABM provides quite a bit of power. Admins can go onto the special infected team in any mode. An admin just having fun can ruin an otherwise great game for unsuspecting players. It should go without saying, respect your players.
 
 ## Configuration Variables (Cvars)
 ```
@@ -131,7 +131,7 @@ Administators can put anyone onto any team and into any bot using either menus o
  - 5+ survivor primary weapon
 "abm_secondaryweapon" = "baseball_bat"
  - 5+ survivor secondary weapon
-"abm_spawninterval" = "18"
+"abm_spawninterval" = "36"
  - SI full team spawn in (5 x N)
 "abm_tankchunkhp" = "2500"
  - Health chunk per survivor on 5+ missions
@@ -139,7 +139,9 @@ Administators can put anyone onto any team and into any bot using either menus o
  - Humans on team limit
 "abm_throwable" = ""
  - 5+ survivor throwable item
-"abm_version" = "0.1.36"
+"abm_unlocksi" = "1"
+ - 0: Off 1: On (Requires Left 4 Downtown 2)
+"abm_version" = "0.1.42"
  - ABM plugin version
 "abm_zoey" = "5"
  - 0:Nick 1:Rochelle 2:Coach 3:Ellis 4:Bill 5:Zoey 6:Francis 7:Louis
@@ -157,7 +159,7 @@ During a game, changing a plugin cvar that differs from the value in its cfg wil
 Some cvars are self explanatory and those that are not are addressed below.
 
 #### abm_autohard (default 1)
-If greater than or equal to 1, (abm_spawninterval x 5) will match a full wave of SI to the size of the surviving team. Half this value will match half the size of the surviving team. SI waves only spawn in non-competitive modes. If you have L4Downtown2, abm_autohard 1 or 2 in a competitive mode will unlock the SI team size but will not spawn any SI.
+If greater than or equal to 1, (abm_spawninterval x 5) will match a full wave of SI to the size of the surviving team. Half this value will match half the size of the surviving team. SI waves only spawn in non-competitive modes. See abm_unlocksi for spawning more SI in competitive modes.
 
 #### abm_joinmenu (default 1)
 When set to 0, players joining will automatically be put onto a team. When set to 1 only admins will join in as spectators and be offered an option to join idler, spectator, survivor or infected. When set to 2, non-admins will join in as spectators and be able to choose from idler, spectator or survivor.
@@ -171,7 +173,7 @@ On the start of every round and during play, survivors are pruned to match this 
 #### abm_offertakeover (default 1)
 When set to 0 this will be turned off. When set to 1 (for survivors) or 2 (for infected), players will be offered a takeover menu (only if a bot is available) upon their death. Setting this to 3, everyone will get a takeover menu on death. This can get noisy for people on SI and may even cause confusion or death.
 
-#### abm_spawninterval (default 18)
+#### abm_spawninterval (default 36)
 The Assistant Director (ADTimer) is fired every 5 seconds. When abm_spawninterval is met a full wave (in non-competitive modes) spawns in. When half this value is met, half the SI will spawn in. See abm_autohard for more details.
 
 #### abm_tankchunkhp (default 2500)
@@ -185,6 +187,9 @@ This many extra survivors are added spawned in at the start of every round. If t
 
 #### abm_zoey (Linux default 5, Windows default 1)
 Due to a bug on Windows, spawning in a Zoey can crash the server. This value is auto detected and set to 5 on Linux and 1 on Windows by default. You'll get the model Zoey in all cases but only on Windows will Zoey really be Rochelle or the model you decide on.
+
+#### abm_unlocksi (default 1)
+Although Left4Downtown2 is overall optional, in most cases it is required if you need to run ABM in competitive modes with teams greater than 4 Vs 4. The cvar when set to 1 will unlock SI and match the surviving team size. The cvar when set to 0 will turn this off. Tuning this cvar has no effect without Left4Downtown2.
 
 ## How-to
 
@@ -246,6 +251,10 @@ Due to a bug on Windows, spawning in a Zoey can crash the server. This value is 
   - A. ```abm-join|join 2```
 - Q. How do I put someone else onto a team?
   - A. ```abm-join|join [ID TEAM]```
+- Q. How do I join SI as a particular SI?
+  - A. ```abm-join|join 3 NAME```
+- Q. How do I make someone else a particular SI?
+  - A. ```abm-join|join ID 3 NAME```
 - Q. How do I see the Join menu?
   - A. ```abm-join|join```
 
@@ -346,7 +355,7 @@ The most valuable assets of any good community are in the time of its people and
 I will take your time and knowledge and pass it forward. I thank you all :)
 
 ### Contributers
-**Ludastar, Spirit_12, cravenge and Timocop.** You fellas stepped up with code and support when I needed it the most (sometimes I didn't even ask).
+**Lux, Spirit_12, cravenge and Timocop.** You fellas stepped up with code and support when I needed it the most (sometimes I didn't even ask).
 
 ### Testers
 **MrSNIPES2, Sev, GamingBigFoot, bluejoy, Maii Maii, Nick9572, TheoldDinosaurT -ZK, MomigaJedi, BooBooKittyFuck, CollDragon and UnaBonger.** When servers crashed and burned you guys stood at the ready.

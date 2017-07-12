@@ -1,4 +1,19 @@
 # ABM Change Log
+## [0.1.42] - 2017-12-07
+### Added
+- abm_unlocksi for use with Left4Downtown2 in competitive modes
+- Tanks in non-competitive modes are now forced to spawn
+
+### Changed
+- Rewrote CleanSIName function and made it simpler
+- Cleaned g_InfectedNames array
+- Increased abm_spawninterval default from 18 to 36 (feels about right)
+
+### Fixed
+- Hang from switching SI from a controlled Tank
+- Rejoining survivors and sometimes creating a new bot
+- Premature ending of competitive rounds
+
 ## [0.1.37] - 2017-09-03
 ### Added
 - abm_spawninterval 0 will turn off SI waves
