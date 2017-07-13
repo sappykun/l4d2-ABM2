@@ -1,4 +1,8 @@
 # ABM Change Log
+## [0.1.45] - 2017-13-07
+### Fixed
+- Tank health calculation
+
 ## [0.1.44] - 2017-12-07
 ### Changed
 - Cleaned up whitespace all around

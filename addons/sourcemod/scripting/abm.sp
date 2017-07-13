@@ -33,7 +33,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.44"
+#define PLUGIN_VERSION "0.1.45"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -87,7 +87,7 @@ char g_cisi[MAXPLAYERS + 1][64];    // g_QDB client Id to steam Id array
 Handle g_AD;                        // Assistant Director Timer
 
 bool g_IsVs = false;
-bool g_IsCoop = false;
+bool g_IsCoop = true;
 bool g_AssistedSpawning = false;
 bool g_RemovedPlayers = false;
 bool g_AddedPlayers = false;
@@ -634,7 +634,7 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
 
     else if (StrEqual(name, "mp_gamemode")) {
         g_IsVs = (StrEqual(newCv, "versus") || StrEqual(newCv, "scavenge"));
-        g_IsCoop = !g_IsVs;
+        g_IsCoop = StrEqual(newCv, "coop");  // forgot about survival, etc
     }
     switch(g_OS) {  // Zoey hates Windows :'(
         case 0: g_Zoey = 5;
