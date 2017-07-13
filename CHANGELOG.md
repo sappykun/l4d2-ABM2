@@ -1,4 +1,11 @@
 # ABM Change Log
+## [0.1.44] - 2017-12-07
+### Changed
+- Cleaned up whitespace all around
+
+### Fixed
+- Humans controlling SI in non-competitive modes spawn fast again
+
 ## [0.1.42] - 2017-12-07
 ### Added
 - abm_unlocksi for use with Left4Downtown2 in competitive modes
