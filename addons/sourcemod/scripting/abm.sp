@@ -33,7 +33,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.46"
+#define PLUGIN_VERSION "0.1.47"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -105,6 +105,7 @@ ConVar g_cvZoey;
 ConVar g_cvExtraPlayers;
 ConVar g_cvGameMode;
 ConVar g_cvTankHealth;
+ConVar g_cvDvars;
 ConVar g_cvTankChunkHp;
 ConVar g_cvSpawnInterval;
 ConVar g_cvMaxSI;
@@ -201,6 +202,8 @@ public OnPluginStart() {
 
     g_cvGameMode = FindConVar("mp_gamemode");
     g_cvTankHealth = FindConVar("z_tank_health");
+    g_cvDvars = FindConVar("l4d2_directoroptions_overwrite");
+
     CreateConVar("abm_version", PLUGIN_VERSION, "ABM plugin version", FCVAR_DONTRECORD);
     g_cvLogLevel = CreateConVar("abm_loglevel", "0", "Development logging level 0: Off, 4: Max");
     g_cvMinPlayers = CreateConVar("abm_minplayers", "4", "Pruning extra survivors stops at this size");
@@ -213,7 +216,7 @@ public OnPluginStart() {
     g_cvTankChunkHp = CreateConVar("abm_tankchunkhp", "2500", "Health chunk per survivor on 5+ missions");
     g_cvSpawnInterval = CreateConVar("abm_spawninterval", "36", "SI full team spawn in (5 x N)");
     g_cvAutoHard = CreateConVar("abm_autohard", "1", "0: Off 1: Non-Vs > 4 2: Non-Vs >= 1");
-    g_cvUnlockSI = CreateConVar("abm_unlocksi", "1", "0: Off 1: On (Requires Left 4 Downtown 2)");
+    g_cvUnlockSI = CreateConVar("abm_unlocksi", "1", "0: Off 1: Use Left 4 Downtown 2 2: Use VScript Director Options Unlocker");
     g_cvJoinMenu = CreateConVar("abm_joinmenu", "1", "0: Off 1: Admins only 2: Everyone");
     g_cvTeamLimit = CreateConVar("abm_teamlimit", "16", "Humans on team limit");
     g_cvOfferTakeover = CreateConVar("abm_offertakeover", "1", "0: Off 1: Survivors 2: Infected 3: All");
@@ -260,7 +263,7 @@ public OnPluginStart() {
     UpdateConVarsHook(g_cvSpawnInterval, "18", "18");
     UpdateConVarsHook(g_cvZoey, g_sB, g_sB);
     UpdateConVarsHook(g_cvAutoHard, "1", "1");
-    UpdateConVarsHook(g_cvUnlockSI, "1", "1");
+    UpdateConVarsHook(g_cvUnlockSI, "0", "0");
     UpdateConVarsHook(g_cvJoinMenu, "1", "1");
     UpdateConVarsHook(g_cvTeamLimit, "16", "16");
     UpdateConVarsHook(g_cvOfferTakeover, "1", "1");
@@ -296,10 +299,9 @@ public Action KillEntTimer(Handle timer, any ref) {
 public Action L4D_OnGetScriptValueInt(const String:key[], &retVal) {
     Echo(4, "L4D_OnGetScriptValueInt: %s, %d", key, retVal);
 
-    // [L4D2] VScript Director Options Unlocker
-    // "MaxSpecials=16;BoomerLimit=4;SmokerLimit=4;HunterLimit=4;ChargerLimit=4;SpitterLimit=4;JockeyLimit=4";
+    // see UpdateConVarsHook "g_UnlockSI" for VScript Director Options Unlocker
 
-    if (g_UnlockSI > 0) {
+    if (g_UnlockSI == 1) {
         int val = retVal;
 
         if (StrEqual(key, "MaxSpecials")) val = g_MaxSI;
@@ -613,6 +615,9 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
 
     else if (StrEqual(name, "abm_unlocksi")) {
         g_UnlockSI = GetConVarInt(g_cvUnlockSI);
+        if (g_cvDvars != null && g_UnlockSI == 2) {
+            SetConVarString(g_cvDvars, "MaxSpecials=16;BoomerLimit=4;SmokerLimit=4;HunterLimit=4;ChargerLimit=4;SpitterLimit=4;JockeyLimit=4");
+        }
     }
 
     else if (StrEqual(name, "abm_joinmenu")) {
