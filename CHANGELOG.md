@@ -1,4 +1,10 @@
 # ABM Change Log
+## [0.1.46] - 2017-18-07
+### Changed
+- Cleaned up AddInfected function, trying to reduce CreateFakeClient
+- Cleaned up L4D_OnGetScriptValueInt (match VScript Director Options Unlocker)
+- Cleaned up UpdateConVarsHook
+
 ## [0.1.45] - 2017-13-07
 ### Fixed
 - Tank health calculation

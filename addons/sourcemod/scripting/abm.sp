@@ -296,25 +296,19 @@ public Action KillEntTimer(Handle timer, any ref) {
 public Action L4D_OnGetScriptValueInt(const String:key[], &retVal) {
     Echo(4, "L4D_OnGetScriptValueInt: %s, %d", key, retVal);
 
+    // [L4D2] VScript Director Options Unlocker
+    // "MaxSpecials=16;BoomerLimit=4;SmokerLimit=4;HunterLimit=4;ChargerLimit=4;SpitterLimit=4;JockeyLimit=4";
+
     if (g_UnlockSI > 0) {
         int val = retVal;
 
-        if (StrEqual(key, "ShouldIgnoreClearStateForSpawn")) val = 1;
-        else if (StrEqual(key, "AlwaysAllowWanderers")) val = 1;
-        else if (StrEqual(key, "ClearedWandererRespawnChance")) val = 1;
-        else if (StrEqual(key, "EnforceFinaleNavSpawnRules")) val = 0;
-        else if (StrEqual(key, "DisallowThreatType")) val = 0;
-        else if (StrEqual(key, "ProhibitBosses")) val = 0;
-        else if (StrEqual(key, "MaxSpecials")) val = g_MaxSI;
-        else if (StrEqual(key, "DominatorLimit")) val = g_MaxSI;
+        if (StrEqual(key, "MaxSpecials")) val = g_MaxSI;
         else if (StrEqual(key, "BoomerLimit")) val = 4;
         else if (StrEqual(key, "SmokerLimit")) val = 4;
         else if (StrEqual(key, "HunterLimit")) val = 4;
         else if (StrEqual(key, "ChargerLimit")) val = 4;
         else if (StrEqual(key, "SpitterLimit")) val = 4;
         else if (StrEqual(key, "JockeyLimit")) val = 4;
-        else if (StrEqual(key, "ZombieDontClear")) val = 1;
-        //else if (StrEqual(key, "CommonLimit")) val = 30;
 
         if (val != retVal) {
             retVal = val;
@@ -355,8 +349,6 @@ public RoundFreezeEndHook(Handle event, const char[] name, bool dontBroadcast) {
 
     delete keys;
 }
-
-
 
 public PlayerActivateHook(Handle event, const char[] name, bool dontBroadcast) {
     Echo(1, "PlayerActivateHook: %s", name);
@@ -553,26 +545,27 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
 
     Format(name, sizeof(name), g_sB);
     Format(value, sizeof(value), "%s", newCv);
+    TrimString(value);
 
     if (StrContains(newCv, "-l") == 0) {
-        ReplaceString(value, sizeof(value), "-l", "");
+        strcopy(value, sizeof(value), value[2]);
+        TrimString(value);
         g_Cvars.SetString(name, value, true);
     }
 
     else if (StrContains(newCv, "-u") == 0) {
-        ReplaceString(value, sizeof(value), "-u", "");
+        strcopy(value, sizeof(value), value[2]);
+        TrimString(value);
         g_Cvars.Remove(name);
     }
 
     g_Cvars.GetString(name, value, sizeof(value));
-    TrimString(value);
-    if (value[0] == EOS) {
-        Format(value, sizeof(value), oldCv);
+    if (!StrEqual(newCv, value)) {
+        SetConVarString(convar, value);
+        return;
     }
 
-    SetConVarString(convar, value);
-
-    if (StrEqual(name, "abm_loglevel")) {
+    else if (StrEqual(name, "abm_loglevel")) {
         g_LogLevel = GetConVarInt(g_cvLogLevel);
     }
 
@@ -638,9 +631,9 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
         g_IsVs = (StrEqual(newCv, "versus") || StrEqual(newCv, "scavenge"));
         g_IsCoop = StrEqual(newCv, "coop");  // forgot about survival, etc
     }
-    switch(g_OS) {  // Zoey hates Windows :'(
-        case 0: g_Zoey = 5;
-        default: g_Zoey = GetConVarInt(g_cvZoey);
+
+    else if (StrEqual(name, "abm_zoey")) {
+        g_Zoey = GetConVarInt(g_cvZoey);
     }
 }
 
