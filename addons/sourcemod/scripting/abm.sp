@@ -33,7 +33,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.47"
+#define PLUGIN_VERSION "0.1.48"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -114,6 +114,8 @@ ConVar g_cvUnlockSI;
 ConVar g_cvJoinMenu;
 ConVar g_cvTeamLimit;
 ConVar g_cvOfferTakeover;
+ConVar g_cvStripKick;
+ConVar g_cvAutoModel;
 
 int g_LogLevel;
 int g_MinPlayers;
@@ -132,6 +134,8 @@ int g_UnlockSI;
 int g_JoinMenu;
 int g_TeamLimit;
 int g_OfferTakeover;
+int g_StripKick;
+int g_AutoModel;
 
 public Plugin myinfo= {
     name = "ABM",
@@ -220,6 +224,8 @@ public OnPluginStart() {
     g_cvJoinMenu = CreateConVar("abm_joinmenu", "1", "0: Off 1: Admins only 2: Everyone");
     g_cvTeamLimit = CreateConVar("abm_teamlimit", "16", "Humans on team limit");
     g_cvOfferTakeover = CreateConVar("abm_offertakeover", "1", "0: Off 1: Survivors 2: Infected 3: All");
+    g_cvStripKick = CreateConVar("abm_stripkick", "0", "0: Don't strip removed bots 1: Strip removed bots");
+    g_cvAutoModel = CreateConVar("abm_automodel", "1", "1: Full set of survivors 0: Map set of survivors");
 
     g_cvMaxSI = FindConVar("z_max_player_zombies");
     SetConVarBounds(g_cvMaxSI, ConVarBound_Lower, true, 1.0);
@@ -250,6 +256,8 @@ public OnPluginStart() {
     HookConVarChange(g_cvTeamLimit, UpdateConVarsHook);
     HookConVarChange(g_cvOfferTakeover, UpdateConVarsHook);
     HookConVarChange(g_cvGameMode, UpdateConVarsHook);
+    HookConVarChange(g_cvStripKick, UpdateConVarsHook);
+    HookConVarChange(g_cvAutoModel, UpdateConVarsHook);
 
     UpdateConVarsHook(g_cvLogLevel, "0", "0");
     UpdateConVarsHook(g_cvMinPlayers, "4", "4");
@@ -267,6 +275,8 @@ public OnPluginStart() {
     UpdateConVarsHook(g_cvJoinMenu, "1", "1");
     UpdateConVarsHook(g_cvTeamLimit, "16", "16");
     UpdateConVarsHook(g_cvOfferTakeover, "1", "1");
+    UpdateConVarsHook(g_cvStripKick, "0", "0");
+    UpdateConVarsHook(g_cvAutoModel, "1", "1");
 
     AutoExecConfig(true, "abm");
     StartAD();
@@ -639,6 +649,14 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
 
     else if (StrEqual(name, "abm_zoey")) {
         g_Zoey = GetConVarInt(g_cvZoey);
+    }
+
+    else if (StrEqual(name, "abm_stripkick")) {
+        g_StripKick = GetConVarInt(g_cvStripKick);
+    }
+
+    else if (StrEqual(name, "abm_automodel")) {
+        g_AutoModel = GetConVarInt(g_cvAutoModel);
     }
 }
 
@@ -1034,7 +1052,10 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
     }
 
     if (onteam == 2) {
-        CreateTimer(0.2, AutoModelTimer, target);
+        if (g_AutoModel == 1) {
+            CreateTimer(0.2, AutoModelTimer, target);
+        }
+
         CreateTimer(0.4, OnSpawnHookTimer, target);
     }
 }
@@ -1867,7 +1888,10 @@ RmBots(int asmany, int onteam) {
         if (GetClientManager(i) == 0 && GetClientTeam(i) == onteam) {
 
             j++;
-            StripClient(i);
+            if (g_StripKick == 1) {
+                StripClient(i);
+            }
+
             KickClient(i);
 
             if (j >= asmany) {
