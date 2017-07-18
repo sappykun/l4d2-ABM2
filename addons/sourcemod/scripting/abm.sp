@@ -33,7 +33,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.45"
+#define PLUGIN_VERSION "0.1.46"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -355,6 +355,8 @@ public RoundFreezeEndHook(Handle event, const char[] name, bool dontBroadcast) {
 
     delete keys;
 }
+
+
 
 public PlayerActivateHook(Handle event, const char[] name, bool dontBroadcast) {
     Echo(1, "PlayerActivateHook: %s", name);
@@ -1070,7 +1072,7 @@ public Action TankAssistTimer(Handle timer, any client) {
                 if (i == 0) {
                     TeleportEntity(client, nullOrigin, NULL_VECTOR, NULL_VECTOR);
                     ForcePlayerSuicide(client);
-                    AddInfected(0, "tank");
+                    AddInfected("tank");
                 }
 
                 return Plugin_Continue;
@@ -1439,53 +1441,21 @@ void CleanSIName(char model[32]) {
     model = g_InfectedNames[i];
 }
 
-bool AddInfected(int version=0, char model[32]="") {
-    Echo(1, "AddInfected: %d %s", version, model);
+bool AddInfected(char model[32]="") {
+    Echo(1, "AddInfected: %d", model);
 
-    // GetEntProp(i, Prop_Send, "m_ghostSpawnState");
-    // considering above in spawning all with z_spawn
-
-    bool result = false;
-    char cmd[12];
-    float i[3];
-
+    bool result;
     CleanSIName(model);
-    int special = CreateFakeClient("SPECIAL");
 
-    if (IsClientValid(special)) {
-
-        switch (version) {
-            case 0: cmd = "z_spawn_old";
-            case 1: cmd = "z_spawn";
+    for (int i = 1; i <= MaxClients; i++) {
+        if (IsClientValid(i)) {
+            GhostsModeProtector(0);
+            Format(g_sB, sizeof(g_sB), "%s auto area", model);
+            QuickCheat(i, "z_spawn_old", g_sB);
+            GhostsModeProtector(1);
+            result = true;
+            break;
         }
-
-        ChangeClientTeam(special, 3);
-        Format(g_sB, sizeof(g_sB), "%s auto area", model);
-
-//         if (!StrEqual(cmd, "z_spawn")) {
-//             for (int j = 1; j <= MaxClients; j++) {
-//                 if (IsClientValid(j) && GetClientTeam(j) == 3 && !IsFakeClient(j)) {
-//                     if (GetEntProp(j, Prop_Send, "m_ghostSpawnState") <= 2) {
-//                         GetClientAbsOrigin(j, i);
-//                         cmd = "z_spawn";
-//                         break;
-//                     }
-//                 }
-//             }
-//         }
-
-        GhostsModeProtector(0);
-        QuickCheat(special, cmd, g_sB);
-        KickClient(special);
-        GhostsModeProtector(1);
-
-        // use z_spawn for humans that request SI
-        // for all others, always use z_spawn_old
-        if (StrEqual(cmd, "z_spawn")) {
-            TeleportEntity(special, i, i, i);
-        }
-
-        result = true;
     }
 
     return result;
@@ -1778,7 +1748,7 @@ SwitchTeam(int client, int onteam, char model[32]="") {
 
                         g_QRecord.SetString("model", model, true);
                         QueueUp(client, 3);
-                        AddInfected(1, model);
+                        AddInfected(model);
                         return;
                     }
 
