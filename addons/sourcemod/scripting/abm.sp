@@ -33,7 +33,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.50"
+#define PLUGIN_VERSION "0.1.51"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -116,6 +116,7 @@ ConVar g_cvTeamLimit;
 ConVar g_cvOfferTakeover;
 ConVar g_cvStripKick;
 ConVar g_cvAutoModel;
+// ConVar g_cvTeamSwitches;
 
 int g_LogLevel;
 int g_MinPlayers;
@@ -210,6 +211,7 @@ public OnPluginStart() {
     g_cvGameMode = FindConVar("mp_gamemode");
     g_cvTankHealth = FindConVar("z_tank_health");
     g_cvDvarsHandle = FindConVar("l4d2_directoroptions_overwrite");
+    // g_cvTeamSwitches = FindConVar("vs_max_team_switches");
 
     CreateConVar("abm_version", PLUGIN_VERSION, "ABM plugin version", FCVAR_DONTRECORD);
     g_cvLogLevel = CreateConVar("abm_loglevel", "0", "Development logging level 0: Off, 4: Max");
@@ -742,9 +744,31 @@ public OnClientPostAdminCheck(int client) {
 
             else if (CountTeamMates(2) >= 1) {
                 CreateTimer(0.1, TakeoverTimer, client);
+                CreateTimer(0.5, AutoIdleTimer, client, TIMER_REPEAT);
             }
         }
     }
+}
+
+public Action AutoIdleTimer(Handle timer, int client) {
+    Echo(1, "AutoIdleTimer: %d", client);
+
+    if (!IsClientValid(client)) {
+        return Plugin_Stop;
+    }
+
+    static onteam;
+    onteam = GetClientTeam(client);
+
+    if (onteam >= 2) {
+        if (onteam == 2) {
+            GoIdle(client, 0);
+        }
+
+        return Plugin_Stop;
+    }
+
+    return Plugin_Continue;
 }
 
 public GoIdleHook(Handle event, const char[] name, bool dontBroadcast) {
@@ -764,7 +788,6 @@ GoIdle(int client, onteam=0) {
     Echo(1, "GoIdle: %d %d", client, onteam);
 
     if (GetQRecord(client)) {
-
         int spec_target;
 
         if (g_onteam == 2) {
@@ -774,6 +797,17 @@ GoIdle(int client, onteam=0) {
             if (onteam == 1) {
                 SwitchToSpec(client);
                 Unqueue(client);
+
+            // if (onteam == 0) {  // ^ onteam <= 1
+            //     static idles;
+            //
+            //     if (isAlive) {
+            //         idles = GetConVarInt(g_cvTeamSwitches);
+            //         SetConVarInt(g_cvTeamSwitches, 99999);
+            //         FakeClientCommand(client, "jointeam 2");
+            //         SetConVarInt(g_cvTeamSwitches, idles);
+            //     }
+            // }
             }
 
             AssignModel(g_target, g_model);
