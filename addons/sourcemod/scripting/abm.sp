@@ -33,7 +33,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.48"
+#define PLUGIN_VERSION "0.1.49"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -105,7 +105,7 @@ ConVar g_cvZoey;
 ConVar g_cvExtraPlayers;
 ConVar g_cvGameMode;
 ConVar g_cvTankHealth;
-ConVar g_cvDvars;
+ConVar g_cvDvarsHandle;
 ConVar g_cvTankChunkHp;
 ConVar g_cvSpawnInterval;
 ConVar g_cvMaxSI;
@@ -136,6 +136,9 @@ int g_TeamLimit;
 int g_OfferTakeover;
 int g_StripKick;
 int g_AutoModel;
+
+static char g_DvarsOriginStr[2048];  // will get lost to an sm plugins reload abm
+static bool g_DvarsCheck;
 
 public Plugin myinfo= {
     name = "ABM",
@@ -206,7 +209,7 @@ public OnPluginStart() {
 
     g_cvGameMode = FindConVar("mp_gamemode");
     g_cvTankHealth = FindConVar("z_tank_health");
-    g_cvDvars = FindConVar("l4d2_directoroptions_overwrite");
+    g_cvDvarsHandle = FindConVar("l4d2_directoroptions_overwrite");
 
     CreateConVar("abm_version", PLUGIN_VERSION, "ABM plugin version", FCVAR_DONTRECORD);
     g_cvLogLevel = CreateConVar("abm_loglevel", "0", "Development logging level 0: Off, 4: Max");
@@ -220,7 +223,7 @@ public OnPluginStart() {
     g_cvTankChunkHp = CreateConVar("abm_tankchunkhp", "2500", "Health chunk per survivor on 5+ missions");
     g_cvSpawnInterval = CreateConVar("abm_spawninterval", "36", "SI full team spawn in (5 x N)");
     g_cvAutoHard = CreateConVar("abm_autohard", "1", "0: Off 1: Non-Vs > 4 2: Non-Vs >= 1");
-    g_cvUnlockSI = CreateConVar("abm_unlocksi", "1", "0: Off 1: Use Left 4 Downtown 2 2: Use VScript Director Options Unlocker");
+    g_cvUnlockSI = CreateConVar("abm_unlocksi", "0", "0: Off 1: Use Left 4 Downtown 2 2: Use VScript Director Options Unlocker");
     g_cvJoinMenu = CreateConVar("abm_joinmenu", "1", "0: Off 1: Admins only 2: Everyone");
     g_cvTeamLimit = CreateConVar("abm_teamlimit", "16", "Humans on team limit");
     g_cvOfferTakeover = CreateConVar("abm_offertakeover", "1", "0: Off 1: Survivors 2: Infected 3: All");
@@ -258,6 +261,7 @@ public OnPluginStart() {
     HookConVarChange(g_cvGameMode, UpdateConVarsHook);
     HookConVarChange(g_cvStripKick, UpdateConVarsHook);
     HookConVarChange(g_cvAutoModel, UpdateConVarsHook);
+
 
     UpdateConVarsHook(g_cvLogLevel, "0", "0");
     UpdateConVarsHook(g_cvMinPlayers, "4", "4");
@@ -487,6 +491,7 @@ public Action ADTimer(Handle timer) {
         if (lastSize != teamSize) {
             lastSize = teamSize;
             AutoSetTankHp();
+            RegulateSI();
         }
     }
 
@@ -625,9 +630,7 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
 
     else if (StrEqual(name, "abm_unlocksi")) {
         g_UnlockSI = GetConVarInt(g_cvUnlockSI);
-        if (g_cvDvars != null && g_UnlockSI == 2) {
-            SetConVarString(g_cvDvars, "MaxSpecials=16;BoomerLimit=4;SmokerLimit=4;HunterLimit=4;ChargerLimit=4;SpitterLimit=4;JockeyLimit=4");
-        }
+        RegulateSI();
     }
 
     else if (StrEqual(name, "abm_joinmenu")) {
@@ -660,6 +663,36 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
     }
 }
 
+void RegulateSI() {
+    Echo(1, "RegulateSI");
+
+    static lastSISize;
+
+    if (g_DvarsCheck && g_cvDvarsHandle != null) {
+        if (g_UnlockSI == 2 && g_MaxSI > 4) {
+            Format(g_sB, sizeof(g_sB), "MaxSpecials=%d;DominatorLimit=%d", g_MaxSI, g_MaxSI);
+            SetConVarString(g_cvDvarsHandle, g_sB);
+
+            if (lastSISize != g_MaxSI) {
+                lastSISize = g_MaxSI;
+            }
+        }
+
+        else {
+            RestoreDvars();
+            lastSISize = 0;
+        }
+    }
+}
+
+void RestoreDvars() {
+    Echo(1, "RestoreDvars");
+
+    if (g_DvarsCheck && g_cvDvarsHandle != null) {
+        SetConVarString(g_cvDvarsHandle, g_DvarsOriginStr);
+    }
+}
+
 AutoSetTankHp() {
     Echo(1, "AutoSetTankHp");
 
@@ -680,7 +713,17 @@ AutoSetTankHp() {
 
 public OnConfigsExecuted() {
     Echo(1, "OnConfigsExecuted");
+
     PrecacheModels();
+
+    if (!g_DvarsCheck) {
+        g_DvarsCheck = true;
+
+        if (g_cvDvarsHandle != null) {
+            GetConVarString(g_cvDvarsHandle, g_DvarsOriginStr, sizeof(g_DvarsOriginStr));
+            RegulateSI();
+        }
+    }
 }
 
 public OnClientPostAdminCheck(int client) {
@@ -1011,6 +1054,12 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
     int onteam = GetClientTeam(target);
 
     if (onteam == 3) {
+
+        // set glows for troubleshooting SI
+        //int iGlowColour = 4278124800;
+        //SetEntProp(target, Prop_Send, "m_iGlowType", 3);
+        //SetEntProp(target, Prop_Send, "m_glowColorOverride", iGlowColour);
+
         if (!g_IsVs) {
             if (g_AssistedSpawning) {
                 int zClass = GetEntProp(target, Prop_Send, "m_zombieClass");
