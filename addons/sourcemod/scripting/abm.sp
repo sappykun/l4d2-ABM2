@@ -33,7 +33,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.49"
+#define PLUGIN_VERSION "0.1.50"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -234,13 +234,14 @@ public OnPluginStart() {
     SetConVarBounds(g_cvMaxSI, ConVarBound_Lower, true, 1.0);
     SetConVarBounds(g_cvMaxSI, ConVarBound_Upper, true, 24.0);
 
+    char zoeyId[2];
     switch(g_OS) {
-        case 0: Format(g_sB, sizeof(g_sB), "5");
-        case 1: Format(g_sB, sizeof(g_sB), "1");
+        case 0: Format(zoeyId, sizeof(zoeyId), "5");
+        case 1: Format(zoeyId, sizeof(zoeyId), "1");
         default: PrintToChatAll("Zoey has gone Sarah Palin");
     }
 
-    g_cvZoey = CreateConVar("abm_zoey", g_sB, "0:Nick 1:Rochelle 2:Coach 3:Ellis 4:Bill 5:Zoey 6:Francis 7:Louis");
+    g_cvZoey = CreateConVar("abm_zoey", zoeyId, "0:Nick 1:Rochelle 2:Coach 3:Ellis 4:Bill 5:Zoey 6:Francis 7:Louis");
 
     HookConVarChange(g_cvLogLevel, UpdateConVarsHook);
     HookConVarChange(g_cvMinPlayers, UpdateConVarsHook);
@@ -262,7 +263,6 @@ public OnPluginStart() {
     HookConVarChange(g_cvStripKick, UpdateConVarsHook);
     HookConVarChange(g_cvAutoModel, UpdateConVarsHook);
 
-
     UpdateConVarsHook(g_cvLogLevel, "0", "0");
     UpdateConVarsHook(g_cvMinPlayers, "4", "4");
     UpdateConVarsHook(g_cvPrimaryWeapon, "shotgun_chrome", "shotgun_chrome");
@@ -273,7 +273,7 @@ public OnPluginStart() {
     UpdateConVarsHook(g_cvExtraPlayers, "0", "0");
     UpdateConVarsHook(g_cvTankChunkHp, "2500", "2500");
     UpdateConVarsHook(g_cvSpawnInterval, "18", "18");
-    UpdateConVarsHook(g_cvZoey, g_sB, g_sB);
+    UpdateConVarsHook(g_cvZoey, zoeyId, zoeyId);
     UpdateConVarsHook(g_cvAutoHard, "1", "1");
     UpdateConVarsHook(g_cvUnlockSI, "0", "0");
     UpdateConVarsHook(g_cvJoinMenu, "1", "1");
