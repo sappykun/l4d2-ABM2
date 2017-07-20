@@ -116,7 +116,6 @@ ConVar g_cvTeamLimit;
 ConVar g_cvOfferTakeover;
 ConVar g_cvStripKick;
 ConVar g_cvAutoModel;
-// ConVar g_cvTeamSwitches;
 
 int g_LogLevel;
 int g_MinPlayers;
@@ -211,7 +210,6 @@ public OnPluginStart() {
     g_cvGameMode = FindConVar("mp_gamemode");
     g_cvTankHealth = FindConVar("z_tank_health");
     g_cvDvarsHandle = FindConVar("l4d2_directoroptions_overwrite");
-    // g_cvTeamSwitches = FindConVar("vs_max_team_switches");
 
     CreateConVar("abm_version", PLUGIN_VERSION, "ABM plugin version", FCVAR_DONTRECORD);
     g_cvLogLevel = CreateConVar("abm_loglevel", "0", "Development logging level 0: Off, 4: Max");
@@ -784,7 +782,7 @@ public GoIdleHook(Handle event, const char[] name, bool dontBroadcast) {
     }
 }
 
-GoIdle(int client, onteam=0) {
+GoIdle(int client, int onteam=0) {
     Echo(1, "GoIdle: %d %d", client, onteam);
 
     if (GetQRecord(client)) {
@@ -797,17 +795,6 @@ GoIdle(int client, onteam=0) {
             if (onteam == 1) {
                 SwitchToSpec(client);
                 Unqueue(client);
-
-            // if (onteam == 0) {  // ^ onteam <= 1
-            //     static idles;
-            //
-            //     if (isAlive) {
-            //         idles = GetConVarInt(g_cvTeamSwitches);
-            //         SetConVarInt(g_cvTeamSwitches, 99999);
-            //         FakeClientCommand(client, "jointeam 2");
-            //         SetConVarInt(g_cvTeamSwitches, idles);
-            //     }
-            // }
             }
 
             AssignModel(g_target, g_model);
