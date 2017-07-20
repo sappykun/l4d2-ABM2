@@ -33,7 +33,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.52"
+#define PLUGIN_VERSION "0.1.53"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -1076,16 +1076,14 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 
     int userid = GetEventInt(event, "userid");
     int target = GetClientOfUserId(userid);
-    GetClientName(target, g_pN, sizeof(g_pN));
 
-    int flag1 = StrContains(g_pN, "SPECIAL");
-    int flag2 = StrContains(g_pN, "SURVIVOR");
-    if (flag1 >= 0 || flag2 >= 0) {
+    GetClientName(target, g_pN, sizeof(g_pN));
+    if (StrContains(g_pN, "ABMclient") >= 0) {
         return;
     }
 
-    int client;
     int onteam = GetClientTeam(target);
+    int client;
 
     if (onteam == 3) {
 
@@ -1462,21 +1460,44 @@ int GetSafeSurvivor(int client) {
 bool AddSurvivor() {
     Echo(1, "AddSurvivor");
 
-    bool result = false;
-    int survivor = CreateFakeClient("SURVIVOR");
+    int i = CreateFakeClient("ABMclient");
 
-    if (IsClientValid(survivor)) {
-        if (DispatchKeyValue(survivor, "classname", "SurvivorBot")) {
-            ChangeClientTeam(survivor, 2);
+    if (IsClientValid(i)) {
+        if (DispatchKeyValue(i, "classname", "SurvivorBot")) {
+            ChangeClientTeam(i, 2);
 
-            if (DispatchSpawn(survivor)) {
-                KickClient(survivor);
-                result = true;
+            if (DispatchSpawn(i)) {
+                KickClient(i);
+                return true;
             }
         }
     }
 
-    return result;
+    return false;
+}
+
+bool AddInfected(char model[32]="", int version=0) {
+    Echo(1, "AddInfected: %s %d", model, version);
+
+    CleanSIName(model);
+    int i = CreateFakeClient("ABMclient");
+
+    if (IsClientValid(i)) {
+        ChangeClientTeam(i, 3);
+        GhostsModeProtector(0);
+        Format(g_sB, sizeof(g_sB), "%s auto area", model);
+
+        switch (version) {
+            case 0: QuickCheat(i, "z_spawn_old", g_sB);
+            case 1: QuickCheat(i, "z_spawn", g_sB);
+        }
+
+        KickClient(i);
+        GhostsModeProtector(1);
+        return true;
+    }
+
+    return false;
 }
 
 GhostsModeProtector(int state) {
@@ -1541,31 +1562,6 @@ void CleanSIName(char model[32]) {
 
     i = GetRandomInt(0, sizeof(g_InfectedNames) - 1);
     model = g_InfectedNames[i];
-}
-
-bool AddInfected(char model[32]="", int version=0) {
-    Echo(1, "AddInfected: %d", model);
-
-    bool result;
-    CleanSIName(model);
-
-    for (int i = 1; i <= MaxClients; i++) {
-        if (IsClientValid(i)) {
-            GhostsModeProtector(0);
-            Format(g_sB, sizeof(g_sB), "%s auto area", model);
-
-            switch (version) {
-                case 0: QuickCheat(i, "z_spawn_old", g_sB);
-                case 1: QuickCheat(i, "z_spawn", g_sB);
-            }
-
-            GhostsModeProtector(1);
-            result = true;
-            break;
-        }
-    }
-
-    return result;
 }
 
 SwitchToSpec(int client, int onteam=1) {
