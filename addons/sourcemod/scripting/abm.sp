@@ -33,7 +33,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.51"
+#define PLUGIN_VERSION "0.1.52"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -1543,7 +1543,7 @@ void CleanSIName(char model[32]) {
     model = g_InfectedNames[i];
 }
 
-bool AddInfected(char model[32]="") {
+bool AddInfected(char model[32]="", int version=0) {
     Echo(1, "AddInfected: %d", model);
 
     bool result;
@@ -1553,7 +1553,12 @@ bool AddInfected(char model[32]="") {
         if (IsClientValid(i)) {
             GhostsModeProtector(0);
             Format(g_sB, sizeof(g_sB), "%s auto area", model);
-            QuickCheat(i, "z_spawn_old", g_sB);
+
+            switch (version) {
+                case 0: QuickCheat(i, "z_spawn_old", g_sB);
+                case 1: QuickCheat(i, "z_spawn", g_sB);
+            }
+
             GhostsModeProtector(1);
             result = true;
             break;
@@ -1850,7 +1855,7 @@ SwitchTeam(int client, int onteam, char model[32]="") {
 
                         g_QRecord.SetString("model", model, true);
                         QueueUp(client, 3);
-                        AddInfected(model);
+                        AddInfected(model, 1);
                         return;
                     }
 
