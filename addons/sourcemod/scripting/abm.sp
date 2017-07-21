@@ -21,9 +21,15 @@ Free Software Foundation, Inc.
 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
+// Lux mentions the following will fix Tank death leave during animation
+// which causes a new tank to spawn and possibly for people to get stuck
+// Lux: z_tank_incapacitated_decay_rate 65000
+// Lux: z_tank_incapacitated_health 1
+
 // TODO:
 //SetEntProp(client, Prop_Send,"m_bHasNightVision", 1);
 //SetEntProp(client, Prop_Send, "m_bNightVisionOn", 1);
+//AcceptEntityInput(client, "clearparent");  // find out which one works!
 
 #pragma semicolon 1
 #include <sourcemod>
@@ -33,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.55"
+#define PLUGIN_VERSION "0.1.56"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -84,7 +90,7 @@ bool g_queued;                      // g_QDB client's takeover state
 float g_origin[3];                  // g_QDB client's origin vector
 bool g_inspec;                      // g_QDB check client's specator mode
 bool g_status;                      // g_QDB client life state
-char g_cisi[MAXPLAYERS + 1][64];    // g_QDB client Id to steam Id array
+bool g_update;                      // g_QDB should we update this record?
 Handle g_AD;                        // Assistant Director Timer
 
 bool g_IsVs;
@@ -170,6 +176,7 @@ public OnPluginStart() {
     }
 
     HookEvent("player_first_spawn", OnSpawnHook);
+    HookEvent("player_spawn", OnAllSpawnHook);
     HookEvent("player_death", OnDeathHook, EventHookMode_Pre);
     HookEvent("player_disconnect", CleanQDBHook);
     HookEvent("player_afk", GoIdleHook);
@@ -213,9 +220,7 @@ public OnPluginStart() {
 
     // Register everyone that we can find
     for (int i = 1; i <= MaxClients; i++) {
-        if (SetQRecord(i, true) != -1) {
-            g_cisi[i] = g_QKey;
-        }
+        SetQRecord(i, true);
     }
 
     g_cvTankHealth = FindConVar("z_tank_health");
@@ -402,6 +407,59 @@ PlayerActivate(int client) {
             }
         }
     }
+}
+
+int GetRealClient(int client) {
+    Echo(1, "GetRealClient: %d", client);
+
+    if (IsClientValid(client)) {
+        if (IsFakeClient(client)) {
+            if (HasEntProp(client, Prop_Send, "m_humanSpectatorUserID")) {
+                int userid = GetEntProp(client, Prop_Send, "m_humanSpectatorUserID");
+                int target = GetClientOfUserId(userid);
+
+                if (IsClientValid(target)) {
+                    client = target;
+                }
+
+                else {
+                    for (int i = 1; i <= MaxClients; i++) {
+                        if (GetQRecord(i) && g_target == client) {
+                            client = i;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    else {
+        client = 0;
+    }
+
+    return client;
+}
+
+
+public Action LifeCheckTimer(Handle timer, int client) {
+    Echo(1, "LifeCheckTimer: %d", client);
+
+    if (IsClientValid(client)) {
+        int status = IsPlayerAlive(client);
+
+        if (GetQRecord(GetRealClient(client))) {
+            g_QRecord.SetValue("status", status, true);
+        }
+    }
+}
+
+public OnAllSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
+    Echo(1, "OnAllSpawnHook: %s", name);
+
+    int userid = GetEventInt(event, "userid");
+    int client = GetClientOfUserId(userid);
+    CreateTimer(0.5, LifeCheckTimer, client);
 }
 
 public RoundStartHook(Handle event, const char[] name, bool dontBroadcast) {
@@ -747,20 +805,35 @@ public OnConfigsExecuted() {
 public OnClientPostAdminCheck(int client) {
     Echo(1, "OnClientPostAdminCheck: %d", client);
 
-    if (!GetQRecord(client)) {
-        if (SetQRecord(client) != -1) {
-            g_cisi[client] = g_QKey;
+    if (!IsFakeClient(client)) {
+        if (GetQRecord(client) && !g_update) {
+            return;
+        }
 
-            if (g_JoinMenu == 2 || g_JoinMenu == 1 && IsAdmin(client)) {
-                GoIdle(client, 1);
-                menuArg0 = client;
-                SwitchTeamHandler(client, 1);
-            }
+        if (IsAdmin(client) || !GetQRecord(client)) {
+            SetQRecord(client, true);
+        }
 
-            else if (CountTeamMates(2) >= 1) {
-                CreateTimer(0.1, TakeoverTimer, client);
-                CreateTimer(0.5, AutoIdleTimer, client, TIMER_REPEAT);
+        else {
+            // ^ !GetQRecord(client)
+            int status = g_status;
+            int onteam = g_onteam;
+
+            if (SetQRecord(client, true) >= 0) {
+                g_QRecord.SetValue("status", status, true);
+                g_QRecord.SetValue("onteam", onteam, true);
             }
+        }
+
+        if (g_JoinMenu == 2 || g_JoinMenu == 1 && IsAdmin(client)) {
+            GoIdle(client, 1);
+            menuArg0 = client;
+            SwitchTeamHandler(client, 1);
+        }
+
+        else if (CountTeamMates(2) >= 1) {
+            CreateTimer(0.1, TakeoverTimer, client);
+            CreateTimer(0.5, AutoIdleTimer, client, TIMER_REPEAT);
         }
     }
 }
@@ -844,16 +917,14 @@ public CleanQDBHook(Handle event, const char[] name, bool dontBroadcast) {
 RemoveQDBKey(int client) {
     Echo(1, "RemoveQDBKey: %d", client);
 
-    // during map change, GetQRecord is not reliable :'(
-    Format(g_sB, sizeof(g_sB), "%s", g_cisi[client]);
+    if (GetQRecord(client)) {
+        g_QRecord.SetValue("update", true, true);
 
-    if (g_QDB.Remove(g_sB)) {
-        g_cisi[client] = "";
-        Echo(0, "AUTH ID: %s, REMOVED FROM QDB.", g_sB);
-
-        int survivors = CountTeamMates(2);
-        if (survivors > (g_MinPlayers + g_ExtraPlayers)) {
-            CreateTimer(1.0, RmBotsTimer, 1);
+        if (g_onteam == 2) {
+            int survivors = CountTeamMates(2);
+            if (survivors > (g_MinPlayers + g_ExtraPlayers)) {
+                CreateTimer(1.0, RmBotsTimer, 1);
+            }
         }
     }
 }
@@ -977,6 +1048,7 @@ bool GetQRecord(int client) {
             g_QRecord.GetValue("queued", g_queued);
             g_QRecord.GetValue("inspec", g_inspec);
             g_QRecord.GetValue("status", g_status);
+            g_QRecord.GetValue("update", g_update);
 
             if (GetClientTeam(client) == 2) {
                 int i = GetClientModelIndex(client);
@@ -1009,6 +1081,7 @@ bool NewQRecord(int client) {
     g_QRecord.SetValue("queued", false, true);
     g_QRecord.SetValue("inspec", false, true);
     g_QRecord.SetValue("status", true, true);
+    g_QRecord.SetValue("update", false, true);
     g_QRecord.SetString("model", "", true);
     g_QRecord.SetString("ghost", "", true);
     return true;
@@ -1048,6 +1121,9 @@ QueueUp(int client, int onteam) {
             case 3: g_iQueue.Push(client);
         }
 
+        g_QRecord.SetValue("target", client, true);
+        g_QRecord.SetValue("inspec", false, true);
+        g_QRecord.SetValue("onteam", onteam, true);
         g_QRecord.SetValue("queued", true, true);
     }
 }
@@ -1477,19 +1553,21 @@ bool AddSurvivor() {
     Echo(1, "AddSurvivor");
 
     int i = CreateFakeClient("ABMclient");
+    bool result;
 
     if (IsClientValid(i)) {
         if (DispatchKeyValue(i, "classname", "SurvivorBot")) {
             ChangeClientTeam(i, 2);
 
             if (DispatchSpawn(i)) {
-                KickClient(i);
-                return true;
+                result = true;
             }
         }
+
+        KickClient(i);
     }
 
-    return false;
+    return result;
 }
 
 bool AddInfected(char model[32]="", int version=0) {
@@ -1584,6 +1662,8 @@ SwitchToSpec(int client, int onteam=1) {
     Echo(1, "SwitchToSpectator: %d %d", client, onteam);
 
     if (GetQRecord(client)) {
+        // clearparent jockey bug switching teams (thanks to Lux)
+        AcceptEntityInput(client, "clearparent");
         g_QRecord.SetValue("inspec", true, true);
         ChangeClientTeam(client, onteam);
 
@@ -1613,7 +1693,7 @@ SwitchToBot(int client, int bot, bool si_ghost=true) {
     }
 }
 
-Takeover(int client, int onteam) {
+void Takeover(int client, int onteam) {
     Echo(1, "Takeover: %d %d", client, onteam);
 
     if (GetQRecord(client)) {
@@ -1623,11 +1703,6 @@ Takeover(int client, int onteam) {
                 return;
             }
         }
-
-        g_QRecord.SetValue("target", client, true);
-        g_QRecord.SetValue("inspec", false, true);
-        g_QRecord.SetValue("onteam", onteam, true);
-        g_QRecord.SetValue("queued", true, true);
 
         int nextBot;
         nextBot = GetNextBot(onteam);
@@ -1639,6 +1714,15 @@ Takeover(int client, int onteam) {
 
         switch (onteam) {
             case 2: {
+                if (g_KeepDead == 1 && !g_status) {
+                    if (g_onteam == 2 && CountTeamMates(2, 0) == 0) {
+                        ChangeClientTeam(client, 2);
+                        ForcePlayerSuicide(client);  // without this player may spawn if survivors are close to start
+                    }
+
+                    return;
+                }
+
                 QueueUp(client, 2);
                 AddSurvivor();
             }
