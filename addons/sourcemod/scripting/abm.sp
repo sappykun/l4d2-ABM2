@@ -87,8 +87,8 @@ bool g_status;                      // g_QDB client life state
 char g_cisi[MAXPLAYERS + 1][64];    // g_QDB client Id to steam Id array
 Handle g_AD;                        // Assistant Director Timer
 
-bool g_IsVs = false;
-bool g_IsCoop = true;
+bool g_IsVs;
+bool g_IsCoop;
 bool g_AssistedSpawning = false;
 bool g_RemovedPlayers = false;
 bool g_AddedPlayers = false;
@@ -147,6 +147,16 @@ public Plugin myinfo= {
     description = "A 5+ Player Enhancement Plugin for L4D2",
     version = PLUGIN_VERSION,
     url = "https://gitlab.com/vbgunz/ABM"
+}
+
+void UpdateGameMode() {
+    Echo(1, "UpdateGameMode");
+
+    if (g_cvGameMode != null) {
+        GetConVarString(g_cvGameMode, g_sB, sizeof(g_sB));
+        g_IsVs = (StrEqual(g_sB, "versus") || StrEqual(g_sB, "scavenge"));
+        g_IsCoop = StrEqual(g_sB, "coop");
+    }
 }
 
 public OnPluginStart() {
@@ -208,9 +218,10 @@ public OnPluginStart() {
         }
     }
 
-    g_cvGameMode = FindConVar("mp_gamemode");
     g_cvTankHealth = FindConVar("z_tank_health");
     g_cvDvarsHandle = FindConVar("l4d2_directoroptions_overwrite");
+    g_cvGameMode = FindConVar("mp_gamemode");
+    UpdateGameMode();
 
     CreateConVar("abm_version", PLUGIN_VERSION, "ABM plugin version", FCVAR_DONTRECORD);
     g_cvLogLevel = CreateConVar("abm_loglevel", "0", "Development logging level 0: Off, 4: Max");
@@ -647,8 +658,7 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
     }
 
     else if (StrEqual(name, "mp_gamemode")) {
-        g_IsVs = (StrEqual(newCv, "versus") || StrEqual(newCv, "scavenge"));
-        g_IsCoop = StrEqual(newCv, "coop");  // forgot about survival, etc
+        UpdateGameMode();
     }
 
     else if (StrEqual(name, "abm_zoey")) {
