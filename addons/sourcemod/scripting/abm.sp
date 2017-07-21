@@ -33,7 +33,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.53"
+#define PLUGIN_VERSION "0.1.54"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -83,6 +83,7 @@ char g_ghost[64];                   // g_QDB client model backup (for activation
 bool g_queued = false;              // g_QDB client's takeover state
 float g_origin[3];                  // g_QDB client's origin vector
 bool g_inspec = false;              // g_QDB check client's specator mode
+bool g_status;                      // g_QDB client life state
 char g_cisi[MAXPLAYERS + 1][64];    // g_QDB client Id to steam Id array
 Handle g_AD;                        // Assistant Director Timer
 
@@ -959,6 +960,7 @@ bool GetQRecord(int client) {
             g_QRecord.GetValue("onteam", g_onteam);
             g_QRecord.GetValue("queued", g_queued);
             g_QRecord.GetValue("inspec", g_inspec);
+            g_QRecord.GetValue("status", g_status);
 
             if (GetClientTeam(client) == 2) {
                 int i = GetClientModelIndex(client);
@@ -990,6 +992,7 @@ bool NewQRecord(int client) {
     g_QRecord.SetValue("onteam", GetClientTeam(client), true);
     g_QRecord.SetValue("queued", false, true);
     g_QRecord.SetValue("inspec", false, true);
+    g_QRecord.SetValue("status", true, true);
     g_QRecord.SetString("model", "", true);
     g_QRecord.SetString("ghost", "", true);
     return true;
@@ -1224,6 +1227,7 @@ public OnDeathHook(Handle event, const char[] name, bool dontBroadcast) {
         GetClientAbsOrigin(client, g_origin);
         g_QRecord.SetValue("target", client, true);
         g_QRecord.SetArray("origin", g_origin, sizeof(g_origin), true);
+        g_QRecord.SetValue("status", false, true);
         bool offerTakeover;
 
         switch (g_onteam) {
@@ -1252,6 +1256,13 @@ public OnDeathHook(Handle event, const char[] name, bool dontBroadcast) {
             GenericMenuCleaner(client);
             menuArg0 = client;
             SwitchToBotHandler(client, 1);
+        }
+    }
+
+    else if (IsClientValid(client)) {
+        client = GetClientManager(client);
+        if (GetQRecord(client)) {
+            g_QRecord.SetValue("status", false, true);
         }
     }
 }
@@ -2218,6 +2229,7 @@ bool TakeoverBotSig(int client, int bot) {
                 SDKCall(hSwitch, client, true);
 
                 Unqueue(client);
+                g_QRecord.SetValue("status", true, true);
                 return true;
             }
         }
@@ -2270,6 +2282,7 @@ bool TakeoverZombieBotSig(int client, int bot, bool si_ghost) {
                 }
 
                 Unqueue(client);
+                g_QRecord.SetValue("status", true, true);
                 g_AssistedSpawning = true;
                 return true;
             }
@@ -3108,7 +3121,7 @@ QDBCheckCmd(client) {
 
             PrintToConsole(client, " - Name: %s", g_pN);
             PrintToConsole(client, " - Origin: {%d.0, %d.0, %d.0}", x, y, z);
-            PrintToConsole(client, " - Status: %d", IsPlayerAlive(i));
+            PrintToConsole(client, " - Status: %d", g_status);
             PrintToConsole(client, " - Client: %d", g_client);
             PrintToConsole(client, " - Target: %d", g_target);
             PrintToConsole(client, " - LastId: %d", g_lastid);
