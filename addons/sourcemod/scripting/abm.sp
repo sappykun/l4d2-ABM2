@@ -117,6 +117,7 @@ ConVar g_cvTeamLimit;
 ConVar g_cvOfferTakeover;
 ConVar g_cvStripKick;
 ConVar g_cvAutoModel;
+ConVar g_cvKeepDead;
 
 int g_LogLevel;
 int g_MinPlayers;
@@ -137,6 +138,7 @@ int g_TeamLimit;
 int g_OfferTakeover;
 int g_StripKick;
 int g_AutoModel;
+int g_KeepDead;
 
 static char g_DvarsOriginStr[2048];  // will get lost to an sm plugins reload abm
 static bool g_DvarsCheck;
@@ -241,6 +243,7 @@ public OnPluginStart() {
     g_cvOfferTakeover = CreateConVar("abm_offertakeover", "1", "0: Off 1: Survivors 2: Infected 3: All");
     g_cvStripKick = CreateConVar("abm_stripkick", "0", "0: Don't strip removed bots 1: Strip removed bots");
     g_cvAutoModel = CreateConVar("abm_automodel", "1", "1: Full set of survivors 0: Map set of survivors");
+    g_cvKeepDead = CreateConVar("abm_keepdead", "0", "0: The dead return alive 1: the dead return dead");
 
     g_cvMaxSI = FindConVar("z_max_player_zombies");
     SetConVarBounds(g_cvMaxSI, ConVarBound_Lower, true, 1.0);
@@ -274,6 +277,7 @@ public OnPluginStart() {
     HookConVarChange(g_cvGameMode, UpdateConVarsHook);
     HookConVarChange(g_cvStripKick, UpdateConVarsHook);
     HookConVarChange(g_cvAutoModel, UpdateConVarsHook);
+    HookConVarChange(g_cvKeepDead, UpdateConVarsHook);
 
     UpdateConVarsHook(g_cvLogLevel, "0", "0");
     UpdateConVarsHook(g_cvMinPlayers, "4", "4");
@@ -293,6 +297,7 @@ public OnPluginStart() {
     UpdateConVarsHook(g_cvOfferTakeover, "1", "1");
     UpdateConVarsHook(g_cvStripKick, "0", "0");
     UpdateConVarsHook(g_cvAutoModel, "1", "1");
+    UpdateConVarsHook(g_cvKeepDead, "0", "0");
 
     AutoExecConfig(true, "abm");
     StartAD();
@@ -671,6 +676,10 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
 
     else if (StrEqual(name, "abm_automodel")) {
         g_AutoModel = GetConVarInt(g_cvAutoModel);
+    }
+
+    else if (StrEqual(name, "abm_keepdead")) {
+        g_KeepDead = GetConVarInt(g_cvKeepDead);
     }
 }
 
