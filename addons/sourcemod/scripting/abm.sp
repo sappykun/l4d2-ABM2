@@ -33,7 +33,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.54"
+#define PLUGIN_VERSION "0.1.55"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -213,10 +213,8 @@ public OnPluginStart() {
 
     // Register everyone that we can find
     for (int i = 1; i <= MaxClients; i++) {
-        if (!GetQRecord(i)) {
-            if (SetQRecord(i) != -1) {
-                g_cisi[i] = g_QKey;
-            }
+        if (SetQRecord(i, true) != -1) {
+            g_cisi[i] = g_QKey;
         }
     }
 
@@ -750,9 +748,8 @@ public OnClientPostAdminCheck(int client) {
     Echo(1, "OnClientPostAdminCheck: %d", client);
 
     if (!GetQRecord(client)) {
-        if (SetQRecord(client) >= 0) {
+        if (SetQRecord(client) != -1) {
             g_cisi[client] = g_QKey;
-            Echo(0, "AUTH ID: %s, ADDED TO QDB.", g_QKey);
 
             if (g_JoinMenu == 2 || g_JoinMenu == 1 && IsAdmin(client)) {
                 GoIdle(client, 1);
@@ -1017,17 +1014,19 @@ bool NewQRecord(int client) {
     return true;
 }
 
-int SetQRecord(int client) {
-    Echo(2, "SetQRecord: %d", client);
+int SetQRecord(int client, bool update=false) {
+    Echo(2, "SetQRecord: %d %d", client, update);
 
     int result = -1;
 
     if (SetQKey(client)) {
-        if (g_QDB.GetValue(g_QKey, g_QRecord)) {
+        if (g_QDB.GetValue(g_QKey, g_QRecord) && !update) {
             result = 0;
         }
 
         else if (NewQRecord(client)) {
+            GetClientName(client, g_pN, sizeof(g_pN));
+            Echo(0, "AUTH ID: %s, (%s) ADDED TO QDB.", g_QKey, g_pN);
             g_QDB.SetValue(g_QKey, g_QRecord, true);
             result = 1;
         }
