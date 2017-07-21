@@ -56,7 +56,7 @@ new Function:callBack;
 char g_QKey[64];      // holds players by STEAM_ID
 StringMap g_QDB;      // holds player records linked by STEAM_ID
 StringMap g_QRecord;  // changes to an individual STEAM_ID mapping
-StringMap g_Cvars;
+StringMap g_Cvars;    // locked cvars end up here
 
 char g_InfectedNames[6][] = {"Boomer", "Smoker", "Hunter", "Spitter", "Jockey", "Charger"};
 char g_SurvivorNames[8][] = {"Nick", "Rochelle", "Coach", "Ellis", "Bill", "Zoey", "Francis", "Louis"};
@@ -80,9 +80,9 @@ int g_lastid;                       // g_QDB client's last known bot id
 int g_onteam = 1;                   // g_QDB client's team
 char g_model[64];                   // g_QDB client's model
 char g_ghost[64];                   // g_QDB client model backup (for activation)
-bool g_queued = false;              // g_QDB client's takeover state
+bool g_queued;                      // g_QDB client's takeover state
 float g_origin[3];                  // g_QDB client's origin vector
-bool g_inspec = false;              // g_QDB check client's specator mode
+bool g_inspec;                      // g_QDB check client's specator mode
 bool g_status;                      // g_QDB client life state
 char g_cisi[MAXPLAYERS + 1][64];    // g_QDB client Id to steam Id array
 Handle g_AD;                        // Assistant Director Timer
@@ -298,12 +298,12 @@ public OnPluginStart() {
     StartAD();
 }
 
-public OnEntityCreated(int ent, const char[] classname) {
-    Echo(1, "OnEntityCreated: %d %s", ent, classname);
+public OnEntityCreated(int ent, const char[] clsName) {
+    Echo(1, "OnEntityCreated: %d %s", ent, clsName);
 
-    if(classname[0] == 'f') {
-        bool gClip = !StrEqual(classname, "func_playerghostinfected_clip", false);
-        bool iClip = !StrEqual(classname, "func_playerinfected_clip", false);
+    if (clsName[0] == 'f') {
+        bool gClip = !StrEqual(clsName, "func_playerghostinfected_clip", false);
+        bool iClip = !StrEqual(clsName, "func_playerinfected_clip", false);
 
         if (!(gClip && iClip)) {
             CreateTimer(1.0, KillEntTimer, EntIndexToEntRef(ent));
