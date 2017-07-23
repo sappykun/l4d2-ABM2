@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.57"
+#define PLUGIN_VERSION "0.1.58"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -1886,6 +1886,13 @@ SwitchTeam(int client, int onteam, char model[32]="") {
                 return;  // keep survivors from rejoining survivors
             }
         }
+
+        if (g_onteam == 2 && onteam <= 1) {
+            if (IsClientValid(g_target) && IsFakeClient(g_target)) {
+                SwitchToBot(client, g_target);
+            }
+        }
+
         switch (onteam) {
             case 0: GoIdle(client, 0);
             case 1: GoIdle(client, 1);
