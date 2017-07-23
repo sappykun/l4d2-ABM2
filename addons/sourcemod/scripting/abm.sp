@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.58"
+#define PLUGIN_VERSION "0.1.59"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -441,7 +441,6 @@ int GetRealClient(int client) {
     return client;
 }
 
-
 public Action LifeCheckTimer(Handle timer, int client) {
     Echo(1, "LifeCheckTimer: %d", client);
 
@@ -537,6 +536,70 @@ public Action ADTimer(Handle timer) {
         g_ADFreeze = false;
     }
 
+    g_ADInterval++;
+    int teamSize = CountTeamMates(2);
+
+    if (teamSize == 0) {
+        g_ADInterval = 0;
+        return Plugin_Continue;
+    }
+
+    g_AssistedSpawning = false;
+    int onteam;
+
+    for (int i = 1; i <= MaxClients; i++) {
+        if (GetQRecord(i)) {
+            if (g_onteam == 3) {
+                if (!g_IsVs) {
+                    g_AssistedSpawning = true;
+
+                    if (!IsPlayerAlive(i) && !g_queued && !g_inspec) {
+                        g_QRecord.SetValue("queued", true, true);
+                        QueueUp(i, 3);
+                    }
+                }
+
+                continue;
+            }
+
+            onteam = GetClientTeam(i);
+            if (onteam == 3) {
+                continue;
+            }
+
+            if (!g_inspec && onteam <= 1) {
+                int jj;
+                int target;
+
+                for (int j = 1; j <= MaxClients; j++) {
+                    if (IsClientValid(j) && IsFakeClient(j) && GetClientTeam(j) == 2) {
+                        jj = GetRealClient(j);
+
+                        if (jj == i) {
+                            target = j;
+                            break;
+                        }
+
+                        if (jj == j && IsFakeClient(jj)) {
+                            target = j;
+                            continue;
+                        }
+                    }
+                }
+
+                if (IsClientValid(target) && IsFakeClient(target)) {
+                    SwitchToBot(i, target);
+                    GoIdle(i, 0);
+                }
+
+                else if (!g_inspec && onteam <= 1) {
+                    CreateTimer(0.1, TakeoverTimer, i);
+                    CreateTimer(0.5, AutoIdleTimer, i, TIMER_REPEAT);
+                }
+            }
+        }
+    }
+
     if (!g_RemovedPlayers && CountTeamMates(2) >= 1) {
         RmBots((g_MinPlayers + g_ExtraPlayers) * -1, 2);
         g_RemovedPlayers = true;
@@ -547,14 +610,6 @@ public Action ADTimer(Handle timer) {
             MkBots((g_MinPlayers + g_ExtraPlayers) * -1, 2);
             g_AddedPlayers = true;
         }
-    }
-
-    g_ADInterval++;
-    int teamSize = CountTeamMates(2);
-
-    if (teamSize == 0) {
-        g_ADInterval = 0;
-        return Plugin_Continue;
     }
 
     static lastSize;
@@ -588,37 +643,6 @@ public Action ADTimer(Handle timer) {
                     Echo(1, " -- Assisting SI %d: Matching Half Team", g_ADInterval);
                     MkBots((teamSize / 2) * -1, 3);
                 }
-            }
-        }
-    }
-
-    int onteam;
-    float nTakeover = 0.1;
-    g_AssistedSpawning = false;
-
-    for (int i = 1; i <= MaxClients; i++) {
-        if (GetQRecord(i)) {
-            if (g_onteam == 3) {
-                if (!g_IsVs) {
-                    g_AssistedSpawning = true;
-
-                    if (!IsPlayerAlive(i) && !g_queued && !g_inspec) {
-                        g_QRecord.SetValue("queued", true, true);
-                        QueueUp(i, 3);
-                    }
-                }
-
-                continue;
-            }
-
-            onteam = GetClientTeam(i);
-            if (onteam == 3) {
-                continue;
-            }
-
-            if (!g_inspec && onteam <= 1) {
-                CreateTimer(nTakeover, TakeoverTimer, i);
-                nTakeover += 0.1;
             }
         }
     }
