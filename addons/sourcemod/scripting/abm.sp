@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.56"
+#define PLUGIN_VERSION "0.1.57"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -1773,7 +1773,6 @@ public Action TakeoverTimer(Handle timer, any client) {
     return Plugin_Handled;
 }
 
-
 int CountTeamMates(int onteam, int mtype=2) {
     Echo(1, "CountTeamMates: %d %d", onteam, mtype);
 
@@ -1788,39 +1787,33 @@ int CountTeamMates(int onteam, int mtype=2) {
     int result;
 
     if (mtype == 2) {
-        static lastSize;
         result = GetTeamClientCount(onteam);
+    }
 
-        if (result > 0 && onteam == 2) {
-            g_MaxSI = result;
+    else {
 
-            if (g_MaxSI != lastSize) {
-                SetConVarFloat(g_cvMaxSI, float(result));
-                lastSize = g_MaxSI;
+        int bots;
+        int humans;
+
+        for (int i = 1; i <= MaxClients; i++) {
+            if (IsClientValid(i) && GetClientTeam(i) == onteam) {
+                switch (IsFakeClient(GetRealClient(i))) {
+                    case 1: bots++;
+                    case 0: humans++;
+                }
             }
         }
 
-        return result;
-    }
-
-    int j;
-    int humans;
-    int bots;
-
-    for (int i = 1; i <= MaxClients; i++) {
-        j = GetClientManager(i);
-
-        if (j >= 0 && GetClientTeam(i) == onteam) {
-            switch (j) {
-                case 0: bots++;
-                default: humans++;
-            }
+        switch (mtype) {
+            case 0: result = bots;
+            case 1: result = humans;
+            case 2: result = bots + humans;
         }
     }
 
-    switch (mtype) {
-        case 0: result = bots;
-        case 1: result = humans;
+    if (onteam == 2 && result > 0) {
+        g_MaxSI = result;
+        SetConVarFloat(g_cvMaxSI, float(result));
     }
 
     return result;
@@ -1829,45 +1822,17 @@ int CountTeamMates(int onteam, int mtype=2) {
 int GetClientManager(int target) {
     Echo(3, "GetClientManager: %d", target);
 
-    int result;
-    int userid;
-    int client;
+    int result = -1;
+    target = GetRealClient(target);
 
-    if (GetQRecord(target)) {
-        return target;
-    }
-
-    else if (IsClientValid(target)) {
-        for (int i = 1; i <= MaxClients; i++) {
-            if (IsClientValid(i) && IsFakeClient(i) && GetClientTeam(i) == 2) {
-
-                // let's really put a stop to the "idling 2 bots at once" problem
-                userid = GetEntData(i, FindSendPropInfo("SurvivorBot", "m_humanSpectatorUserID"));
-                client = GetClientOfUserId(userid);
-
-                if (GetQRecord(client) && i != g_target) {
-                    if (HasEntProp(i, Prop_Send, "m_humanSpectatorUserID")) {
-                        SetEntProp(i, Prop_Send, "m_humanSpectatorUserID", 0);
-                    }
-                }
-            }
-        }
-
-        for (int i = 1; i <= MaxClients; i++) {
-            if (GetQRecord(i)) {
-                if (IsClientValid(g_target) && g_target == target) {
-                    result = i;
-                    break;
-                }
-            }
+    if (IsClientValid(target)) {
+        switch (IsFakeClient(target)) {
+            case 0: result = target;
+            case 1: result = 0;
         }
     }
 
-    else {
-        result = -1;  // this target is NOT valid
-    }
-
-    return result;  // target IS valid and NOT managed
+    return result;
 }
 
 int GetNextBot(int onteam, int skipIndex=0, alive=false) {
