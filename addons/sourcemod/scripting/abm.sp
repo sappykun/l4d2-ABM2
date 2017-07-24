@@ -143,7 +143,7 @@ int g_JoinMenu;
 int g_TeamLimit;
 int g_OfferTakeover;
 int g_StripKick;
-int g_AutoModel;
+bool g_AutoModel;
 int g_KeepDead;
 
 static char g_DvarsOriginStr[2048];  // will get lost to an sm plugins reload abm
@@ -394,7 +394,7 @@ public PlayerActivateHook(Handle event, const char[] name, bool dontBroadcast) {
     PlayerActivate(client);
 }
 
-PlayerActivate(int client) {
+void PlayerActivate(int client) {
     Echo(1, "PlayerActivate: %d", client);
 
     if (GetQRecord(client)) {
@@ -755,7 +755,7 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
     }
 
     else if (StrEqual(name, "abm_automodel")) {
-        g_AutoModel = GetConVarInt(g_cvAutoModel);
+        g_AutoModel = GetConVarBool(g_cvAutoModel);
     }
 
     else if (StrEqual(name, "abm_keepdead")) {
@@ -793,7 +793,7 @@ void RestoreDvars() {
     }
 }
 
-AutoSetTankHp() {
+void AutoSetTankHp() {
     Echo(1, "AutoSetTankHp");
 
     int tankHp;
@@ -896,7 +896,7 @@ public GoIdleHook(Handle event, const char[] name, bool dontBroadcast) {
     }
 }
 
-GoIdle(int client, int onteam=0) {
+void GoIdle(int client, int onteam=0) {
     Echo(1, "GoIdle: %d %d", client, onteam);
 
     if (GetQRecord(client)) {
@@ -938,7 +938,7 @@ public CleanQDBHook(Handle event, const char[] name, bool dontBroadcast) {
     RemoveQDBKey(client);
 }
 
-RemoveQDBKey(int client) {
+void RemoveQDBKey(int client) {
     Echo(1, "RemoveQDBKey: %d", client);
 
     if (GetQRecord(client)) {
@@ -1134,7 +1134,7 @@ int SetQRecord(int client, bool update=false) {
     return result;
 }
 
-QueueUp(int client, int onteam) {
+void QueueUp(int client, int onteam) {
     Echo(1, "QueueUp: %d %d", client, onteam);
 
     if (onteam >= 2 && GetQRecord(client)) {
@@ -1152,7 +1152,7 @@ QueueUp(int client, int onteam) {
     }
 }
 
-Unqueue(int client) {
+void Unqueue(int client) {
     Echo(1, "Unqueue: %d", client);
 
     if (GetQRecord(client)) {
@@ -1241,7 +1241,7 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
     }
 
     if (onteam == 2) {
-        if (g_AutoModel == 1) {
+        if (g_AutoModel) {
             CreateTimer(0.2, AutoModelTimer, target);
         }
 
@@ -1377,11 +1377,8 @@ public OnDeathHook(Handle event, const char[] name, bool dontBroadcast) {
         }
     }
 
-    else if (IsClientValid(client)) {
-        client = GetClientManager(client);
-        if (GetQRecord(client)) {
-            g_QRecord.SetValue("status", false, true);
-        }
+    else if (GetQRecord(GetRealClient(client))) {
+        g_QRecord.SetValue("status", false, true);
     }
 }
 
@@ -1480,7 +1477,7 @@ public QBakHook(Handle event, const char[] name, bool dontBroadcast) {
 // UNORGANIZED AS OF YET
 // ================================================================== //
 
-StripClient(int client) {
+void StripClient(int client) {
     Echo(1, "StripClient: %d", client);
 
     if (IsClientValid(client)) {
@@ -1492,7 +1489,7 @@ StripClient(int client) {
     }
 }
 
-StripClientSlot(int client, int slot) {
+void StripClientSlot(int client, int slot) {
     Echo(1, "StripClientSlot: %d %d", client, slot);
 
     client = GetPlayClient(client);
@@ -1508,7 +1505,7 @@ StripClientSlot(int client, int slot) {
     }
 }
 
-RespawnClient(int client, int target=0) {
+void RespawnClient(int client, int target=0) {
     Echo(1, "RespawnClient: %d %d", client, target);
 
     if (!IsClientValid(client)) {
@@ -1540,7 +1537,7 @@ RespawnClient(int client, int target=0) {
     TeleportEntity(client, origin, NULL_VECTOR, NULL_VECTOR);
 }
 
-TeleportClient(int client, int target) {
+void TeleportClient(int client, int target) {
     Echo(1, "TeleportClient: %d %d", client, target);
 
     float origin[3];
@@ -1618,7 +1615,7 @@ bool AddInfected(char model[32]="", int version=0) {
     return false;
 }
 
-GhostsModeProtector(int state) {
+void GhostsModeProtector(int state) {
     Echo(1, "GhostsModeProtector: %d", state);
     // CAREFUL: 0 starts this function and you must close it with 1 or
     // risk breaking things. Close this with 1 immediately when done.
@@ -1682,7 +1679,7 @@ void CleanSIName(char model[32]) {
     model = g_InfectedNames[i];
 }
 
-SwitchToSpec(int client, int onteam=1) {
+void SwitchToSpec(int client, int onteam=1) {
     Echo(1, "SwitchToSpectator: %d %d", client, onteam);
 
     if (GetQRecord(client)) {
@@ -1697,7 +1694,7 @@ SwitchToSpec(int client, int onteam=1) {
     }
 }
 
-QuickCheat(int client, char [] cmd, char [] arg) {
+void QuickCheat(int client, char [] cmd, char [] arg) {
     Echo(1, "QuickCheat: %d %s %s", client, cmd, arg);
 
     int flags = GetCommandFlags(cmd);
@@ -1706,7 +1703,7 @@ QuickCheat(int client, char [] cmd, char [] arg) {
     SetCommandFlags(cmd, flags);
 }
 
-SwitchToBot(int client, int bot, bool si_ghost=true) {
+void SwitchToBot(int client, int bot, bool si_ghost=true) {
     Echo(1, "SwitchToBot: %d %d %d", client, bot, si_ghost);
 
     if (client != bot && IsClientValid(bot)) {
@@ -1886,7 +1883,7 @@ int GetNextBot(int onteam, int skipIndex=0, alive=false) {
     return bot;
 }
 
-CycleBots(int client, int onteam) {
+void CycleBots(int client, int onteam) {
     Echo(1, "CycleBots: %d %d", client, onteam);
 
     if (onteam <= 1) {
@@ -1901,7 +1898,7 @@ CycleBots(int client, int onteam) {
     }
 }
 
-SwitchTeam(int client, int onteam, char model[32]="") {
+void SwitchTeam(int client, int onteam, char model[32]="") {
     Echo(1, "SwitchTeam: %d %d", client, onteam);
 
     if (GetQRecord(client)) {
@@ -1975,7 +1972,7 @@ public Action MkBotsCmd(int client, args) {
     }
 }
 
-MkBots(int asmany, int onteam) {
+void MkBots(int asmany, int onteam) {
     Echo(1, "MkBots: %d %d", asmany, onteam);
 
     if (asmany < 0) {
@@ -2043,7 +2040,7 @@ public Action RmBotsCmd(int client, args) {
     }
 }
 
-RmBots(int asmany, int onteam) {
+void RmBots(int asmany, int onteam) {
     Echo(1, "RmBots: %d %d", asmany, onteam);
 
     int j;
@@ -2132,7 +2129,7 @@ public Action AutoModelTimer(Handle timer, any client) {
     return Plugin_Handled;
 }
 
-PrecacheModels() {
+void PrecacheModels() {
     Echo(1, "PrecacheModels");
 
     for (int i = 0; i < sizeof(g_SurvivorPaths); i++) {
@@ -2144,7 +2141,7 @@ PrecacheModels() {
     }
 }
 
-AssignModel(int client, char [] model) {
+void AssignModel(int client, char [] model) {
     Echo(1, "AssignModel: %d %s", client, model);
 
     if (GetClientTeam(client) != 2 || IsClientsModel(client, model)) {
@@ -2906,7 +2903,7 @@ public MainMenuHandler(int client, int level) {
 // MENUS BACKBONE
 // ================================================================== //
 
-GenericMenuCleaner(int client, bool clearStack=true) {
+void GenericMenuCleaner(int client, bool clearStack=true) {
     Echo(1, "GenericMenuCleaner: %d %d", client, clearStack);
 
     for (int i = 0; i < sizeof(g_menuItems[]); i++) {
@@ -3006,7 +3003,7 @@ public GenericMenuHandler(Menu menu, MenuAction action, int param1, int param2) 
 // MENUS
 // ================================================================== //
 
-MainMenu(int client, char [] title) {
+void MainMenu(int client, char [] title) {
     Echo(1, "MainMenu: %d %s", client, title);
 
     Menu menu = new Menu(GenericMenuHandler);
@@ -3023,7 +3020,7 @@ MainMenu(int client, char [] title) {
     menu.Display(client, 120);
 }
 
-InvSlotsMenu(int client, int target, char [] title) {
+void InvSlotsMenu(int client, int target, char [] title) {
     Echo(1, "InvSlotsMenu: %d %d %s", client, target, title);
 
     int ent;
@@ -3046,7 +3043,7 @@ InvSlotsMenu(int client, int target, char [] title) {
     menu.Display(client, 120);
 }
 
-ModelsMenu(int client, char [] title) {
+void ModelsMenu(int client, char [] title) {
     Echo(1, "ModelsMenu: %d %s", client, title);
 
     Menu menu = new Menu(GenericMenuHandler);
@@ -3062,7 +3059,7 @@ ModelsMenu(int client, char [] title) {
     menu.Display(client, 120);
 }
 
-TeamsMenu(int client, char [] title, bool all=true) {
+void TeamsMenu(int client, char [] title, bool all=true) {
     Echo(1, "TeamsMenu: %d %s %d", client, title, all);
 
     Menu menu = new Menu(GenericMenuHandler);
@@ -3083,7 +3080,7 @@ TeamsMenu(int client, char [] title, bool all=true) {
     menu.Display(client, 120);
 }
 
-TeamMatesMenu(int client, char [] title, int mtype=2, int target=0, bool incDead=true,
+void TeamMatesMenu(int client, char [] title, int mtype=2, int target=0, bool incDead=true,
             bool repeat=false, int homeTeam=0) {
     Echo(1, "TeamMatesMenu: %d %s %d %d %d %d %d", client, title, mtype, target, incDead, repeat, homeTeam);
 
@@ -3194,7 +3191,7 @@ TeamMatesMenu(int client, char [] title, int mtype=2, int target=0, bool incDead
 // MISC STUFF USEFUL FOR TROUBLESHOOTING
 // ================================================================== //
 
-Echo(int level, char [] format, any ...) {
+void Echo(int level, char [] format, any ...) {
     if (g_LogLevel >= level) {
         VFormat(g_dB, sizeof(g_dB), format, 3);
         LogToFile(LOGFILE, g_dB);
@@ -3202,7 +3199,7 @@ Echo(int level, char [] format, any ...) {
     }
 }
 
-QDBCheckCmd(client) {
+void QDBCheckCmd(client) {
     Echo(1, "QDBCheckCmd");
 
     PrintToConsole(client, "-- STAT: QDB Size is %d", g_QDB.Size);
