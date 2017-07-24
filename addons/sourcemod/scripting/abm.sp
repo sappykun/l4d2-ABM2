@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.59"
+#define PLUGIN_VERSION "0.1.60"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -444,12 +444,9 @@ int GetRealClient(int client) {
 public Action LifeCheckTimer(Handle timer, int client) {
     Echo(1, "LifeCheckTimer: %d", client);
 
-    if (IsClientValid(client)) {
+    if (GetQRecord(GetRealClient(client))) {
         int status = IsPlayerAlive(client);
-
-        if (GetQRecord(GetRealClient(client))) {
-            g_QRecord.SetValue("status", status, true);
-        }
+        g_QRecord.SetValue("status", status, true);
     }
 }
 
@@ -458,7 +455,10 @@ public OnAllSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 
     int userid = GetEventInt(event, "userid");
     int client = GetClientOfUserId(userid);
-    CreateTimer(0.5, LifeCheckTimer, client);
+
+    if (IsClientValid(client)) {
+        CreateTimer(0.5, LifeCheckTimer, client);
+    }
 }
 
 public RoundStartHook(Handle event, const char[] name, bool dontBroadcast) {
