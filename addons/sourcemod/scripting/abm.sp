@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.67"
+#define PLUGIN_VERSION "0.1.68"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -81,16 +81,16 @@ char g_SurvivorPaths[8][] = {
 char g_dB[512];                     // generic debug string buffer
 char g_sB[512];                     // generic catch all string buffer
 char g_pN[128];                     // a dedicated buffer to storing a players name
-int g_client;                       // g_QDB client id
-int g_target;                       // g_QDB player (human or bot) id
-int g_lastid;                       // g_QDB client's last known bot id
-int g_onteam = 1;                   // g_QDB client's team
-char g_model[64];                   // g_QDB client's model
-bool g_queued;                      // g_QDB client's takeover state
-float g_origin[3];                  // g_QDB client's origin vector
-bool g_inspec;                      // g_QDB check client's specator mode
-bool g_status;                      // g_QDB client life state
-bool g_update;                      // g_QDB should we update this record?
+int g_client, g_tmpClient;          // g_QDB client id
+int g_target, g_tmpTarget;          // g_QDB player (human or bot) id
+int g_lastid, g_tmpLastid;          // g_QDB client's last known bot id
+int g_onteam, g_tmpOnteam = 1;      // g_QDB client's team
+bool g_queued, g_tmpQueued;         // g_QDB client's takeover state
+bool g_inspec, g_tmpInspec;         // g_QDB check client's specator mode
+bool g_status, g_tmpStatus;         // g_QDB client life state
+bool g_update, g_tmpUpdate;         // g_QDB should we update this record?
+char g_model[64], g_tmpModel[64];   // g_QDB client's model
+float g_origin[3], g_tmpOrigin[3];  // g_QDB client's origin vector
 Handle g_AD;                        // Assistant Director Timer
 
 bool g_IsVs;
@@ -424,7 +424,7 @@ int GetRealClient(int client) {
 
             else {
                 for (int i = 1; i <= MaxClients; i++) {
-                    if (GetQRtmp(i) && g_QRtmp.GetValue("target", target) && target == client) {
+                    if (GetQRtmp(i) && g_tmpTarget == client) {
                         client = i;
                         break;
                     }
@@ -526,8 +526,8 @@ public RoundStartHook(Handle event, const char[] name, bool dontBroadcast) {
     StartAD();
 
     for (int i = 1; i <= MaxClients; i++) {
-        if (GetQRecord(i)) {
-            if (!g_IsVs && g_onteam == 3) {
+        if (GetQRtmp(i)) {
+            if (!g_IsVs && g_tmpOnteam == 3) {
                 SwitchTeam(i, 3);
             }
         }
@@ -616,13 +616,13 @@ public Action ADTimer(Handle timer) {
     int onteam;
 
     for (int i = 1; i <= MaxClients; i++) {
-        if (GetQRecord(i)) {
-            if (g_onteam == 3) {
+        if (GetQRtmp(i)) {
+            if (g_tmpOnteam == 3) {
                 if (!g_IsVs) {
                     g_AssistedSpawning = true;
 
-                    if (!IsPlayerAlive(i) && !g_queued && !g_inspec) {
-                        g_QRecord.SetValue("queued", true, true);
+                    if (!IsPlayerAlive(i) && !g_tmpQueued && !g_tmpInspec) {
+                        g_QRtmp.SetValue("queued", true, true);
                         QueueUp(i, 3);
                     }
                 }
@@ -635,14 +635,12 @@ public Action ADTimer(Handle timer) {
                 continue;
             }
 
-            if (g_ADInterval == 1 && g_inspec && g_target != i) {
-                //GoIdle(i, 0);
-                //AssignModel(i, g_model);
+            if (g_ADInterval == 1 && g_tmpInspec && g_tmpTarget != i) {
                 SwitchTeam(i, 2);
                 GoIdle(i, 0);
             }
 
-            else if (!g_inspec && onteam <= 1) {
+            else if (!g_tmpInspec && onteam <= 1) {
                 int jj;
                 int target;
 
@@ -667,7 +665,7 @@ public Action ADTimer(Handle timer) {
                     GoIdle(i, 0);
                 }
 
-                else if (!g_inspec && onteam <= 1) {
+                else if (!g_tmpInspec && onteam <= 1) {
                     CreateTimer(0.1, TakeoverTimer, i);
                     CreateTimer(0.5, AutoIdleTimer, i, TIMER_REPEAT);
                 }
@@ -1146,8 +1144,21 @@ bool GetQRtmp(int client) {
     static char QKey[64];
     QKey = g_QKey;
 
-    if (SetQKey(client) && g_QDB.GetValue(g_QKey, g_QRtmp)) {
-        result = true;
+    if (SetQKey(client)) {
+        if (g_QDB.GetValue(g_QKey, g_QRtmp)) {
+
+            g_QRtmp.GetValue("client", g_tmpClient);
+            g_QRtmp.GetValue("target", g_tmpTarget);
+            g_QRtmp.GetValue("lastid", g_tmpLastid);
+            g_QRtmp.GetValue("onteam", g_tmpOnteam);
+            g_QRtmp.GetValue("queued", g_tmpQueued);
+            g_QRtmp.GetValue("inspec", g_tmpInspec);
+            g_QRtmp.GetValue("status", g_tmpStatus);
+            g_QRtmp.GetValue("update", g_tmpUpdate);
+            g_QRtmp.GetString("model", g_tmpModel, sizeof(g_tmpModel));
+            g_QRtmp.GetArray("origin", g_tmpOrigin, sizeof(g_tmpOrigin));
+            result = true;
+        }
     }
 
     g_QKey = QKey;
@@ -1666,8 +1677,7 @@ bool AddSurvivor() {
         return false;
     }
 
-    static i;
-    i = CreateFakeClient("ABMclient2");
+    int i = CreateFakeClient("ABMclient2");
     bool result;
 
     if (IsClientValid(i)) {
@@ -1693,8 +1703,7 @@ bool AddInfected(char model[32]="", int version=0) {
     }
 
     CleanSIName(model);
-    static i;
-    i = CreateFakeClient("ABMclient3");
+    int i = CreateFakeClient("ABMclient3");
 
     if (IsClientValid(i)) {
         ChangeClientTeam(i, 3);
@@ -1733,7 +1742,7 @@ void GhostsModeProtector(int state) {
     switch (state) {
         case 0: {
             for (int i = 1; i <= MaxClients; i++) {
-                if (GetQRecord(i) && g_onteam == 3) {
+                if (GetQRtmp(i) && g_tmpOnteam == 3) {
                     if (GetEntProp(i, Prop_Send, "m_isGhost") == 1) {
                         SetEntProp(i, Prop_Send, "m_isGhost", 0);
                         ghosts[i] = 1;
@@ -1788,12 +1797,8 @@ void SwitchToSpec(int client, int onteam=1) {
         ChangeClientTeam(client, onteam);
 
         if (GetRealClient(g_target) == client) {
-            switch (g_onteam) {
-                case 2: AssignModel(g_target, g_model);
-                case 3: {
-                    g_QRecord.SetString("model", "", true);
-                    PrintToServer("--2: %N is model '%s'", client, "");
-                }
+            if (g_onteam == 2) {
+                AssignModel(g_target, g_model);
             }
 
             if (HasEntProp(g_target, Prop_Send, "m_humanSpectatorUserID")) {
@@ -2450,7 +2455,6 @@ bool TakeoverBotSig(int client, int target) {
 
         else if (IsClientValid(target, 2, 0)) {
             if (GetRealClient(target) != client) {
-                GetQRecord(client);
                 GetBotCharacter(target, g_model);
                 g_QRecord.SetString("model", g_model, true);
                 Echo(1, "--5: %N is model '%s'", client, g_model);
@@ -2502,13 +2506,11 @@ bool TakeoverZombieBotSig(int client, int target, bool si_ghost) {
         }
 
         else if (IsClientValid(target, 3, 0) && IsPlayerAlive(target)) {
-            GetQRecord(client);
-            GetBotCharacter(target, g_model);
-            g_QRecord.SetString("model", g_model, true);
-            PrintToServer("--5: %N is model '%s'", client, g_model);
-
             SwitchToSpec(client);
             SDKCall(hSwitch, client, target);
+            GetBotCharacter(target, g_model);
+            g_QRecord.SetString("model", g_model, true);
+            Echo(1, "--6: %N is model '%s'", client, g_model);
 
             if (si_ghost) {
                 State_TransitionSig(client, 8);
@@ -3348,7 +3350,7 @@ void QDBCheckCmd(client) {
     PrintToConsole(client, "-- MinPlayers is %d", g_MinPlayers);
 
     for (int i = 1; i <= MaxClients; i++) {
-        if (GetQRecord(i)) {
+        if (GetQRtmp(i)) {
             PrintToConsole(client, "\n -");
             GetClientName(i, g_pN, sizeof(g_pN));
 
@@ -3358,14 +3360,14 @@ void QDBCheckCmd(client) {
 
             PrintToConsole(client, " - Name: %s", g_pN);
             PrintToConsole(client, " - Origin: {%d.0, %d.0, %d.0}", x, y, z);
-            PrintToConsole(client, " - Status: %d", g_status);
-            PrintToConsole(client, " - Client: %d", g_client);
-            PrintToConsole(client, " - Target: %d", g_target);
-            PrintToConsole(client, " - LastId: %d", g_lastid);
-            PrintToConsole(client, " - OnTeam: %d", g_onteam);
-            PrintToConsole(client, " - Queued: %d", g_queued);
-            PrintToConsole(client, " - InSpec: %d", g_inspec);
-            PrintToConsole(client, " - Model: %s", g_model);
+            PrintToConsole(client, " - Status: %d", g_tmpStatus);
+            PrintToConsole(client, " - Client: %d", g_tmpClient);
+            PrintToConsole(client, " - Target: %d", g_tmpTarget);
+            PrintToConsole(client, " - LastId: %d", g_tmpLastid);
+            PrintToConsole(client, " - OnTeam: %d", g_tmpOnteam);
+            PrintToConsole(client, " - Queued: %d", g_tmpQueued);
+            PrintToConsole(client, " - InSpec: %d", g_tmpInspec);
+            PrintToConsole(client, " - Model: %s", g_tmpModel);
             PrintToConsole(client, " -\n");
         }
     }
