@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.66"
+#define PLUGIN_VERSION "0.1.67"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -159,7 +159,7 @@ public Plugin myinfo= {
 }
 
 void UpdateGameMode() {
-    Echo(1, "UpdateGameMode");
+    Echo(2, "UpdateGameMode");
 
     if (g_cvGameMode != null) {
         GetConVarString(g_cvGameMode, g_sB, sizeof(g_sB));
@@ -169,7 +169,7 @@ void UpdateGameMode() {
 }
 
 public OnPluginStart() {
-    Echo(1, "OnPluginStart");
+    Echo(2, "OnPluginStart");
 
     g_GameData = LoadGameConfigFile("abm");
     if (g_GameData == null) {
@@ -310,7 +310,7 @@ public OnPluginStart() {
 }
 
 public OnEntityCreated(int ent, const char[] clsName) {
-    Echo(1, "OnEntityCreated: %d %s", ent, clsName);
+    Echo(2, "OnEntityCreated: %d %s", ent, clsName);
 
     if (clsName[0] == 'f') {
         bool gClip = !StrEqual(clsName, "func_playerghostinfected_clip", false);
@@ -323,7 +323,7 @@ public OnEntityCreated(int ent, const char[] clsName) {
 }
 
 public Action KillEntTimer(Handle timer, any ref) {
-    Echo(1, "KillEntTimer: %d", ref);
+    Echo(2, "KillEntTimer: %d", ref);
 
     int ent = EntRefToEntIndex(ref);
     if (ent != INVALID_ENT_REFERENCE || IsValidEntity(ent)) {
@@ -334,7 +334,7 @@ public Action KillEntTimer(Handle timer, any ref) {
 }
 
 public Action L4D_OnGetScriptValueInt(const String:key[], &retVal) {
-    Echo(4, "L4D_OnGetScriptValueInt: %s, %d", key, retVal);
+    Echo(5, "L4D_OnGetScriptValueInt: %s, %d", key, retVal);
 
     // see UpdateConVarsHook "g_UnlockSI" for VScript Director Options Unlocker
 
@@ -359,7 +359,7 @@ public Action L4D_OnGetScriptValueInt(const String:key[], &retVal) {
 }
 
 public RoundFreezeEndHook(Handle event, const char[] name, bool dontBroadcast) {
-    Echo(1, "RoundFreezeEndHook: %s", name);
+    Echo(2, "RoundFreezeEndHook: %s", name);
 
     if (g_ADFreeze) {
         return;
@@ -389,7 +389,7 @@ public RoundFreezeEndHook(Handle event, const char[] name, bool dontBroadcast) {
 }
 
 public PlayerActivateHook(Handle event, const char[] name, bool dontBroadcast) {
-    Echo(1, "PlayerActivateHook: %s", name);
+    Echo(2, "PlayerActivateHook: %s", name);
 
     int userid = GetEventInt(event, "userid");
     int client = GetClientOfUserId(userid);
@@ -397,7 +397,7 @@ public PlayerActivateHook(Handle event, const char[] name, bool dontBroadcast) {
 }
 
 void PlayerActivate(int client) {
-    Echo(1, "PlayerActivate: %d", client);
+    Echo(2, "PlayerActivate: %d", client);
 
     if (GetQRecord(client)) {
         StartAD();
@@ -411,7 +411,7 @@ void PlayerActivate(int client) {
 }
 
 int GetRealClient(int client) {
-    Echo(1, "GetRealClient: %d", client);
+    Echo(2, "GetRealClient: %d", client);
 
     if (IsClientValid(client, 0)) {
         if (HasEntProp(client, Prop_Send, "m_humanSpectatorUserID")) {
@@ -441,7 +441,7 @@ int GetRealClient(int client) {
 }
 
 void GetBotCharacter(int client, char strBuffer[64]) {
-    Echo(1, "GetBotCharacter: %d", client);
+    Echo(2, "GetBotCharacter: %d", client);
 
     strBuffer = "";
 
@@ -491,7 +491,7 @@ void GetBotCharacter(int client, char strBuffer[64]) {
 }
 
 public Action LifeCheckTimer(Handle timer, int target) {
-    Echo(1, "LifeCheckTimer: %d", target);
+    Echo(2, "LifeCheckTimer: %d", target);
 
     if (GetQRecord(GetRealClient(target))) {
         int status = IsPlayerAlive(target);
@@ -501,7 +501,7 @@ public Action LifeCheckTimer(Handle timer, int target) {
             case 0: {
                 GetBotCharacter(target, g_model);
                 g_QRecord.SetString("model", g_model, true);
-                PrintToServer("--6: %N is model '%s'", g_client, g_model);
+                Echo(1, "--0: %N is model '%s'", g_client, g_model);
             }
         }
 
@@ -511,7 +511,7 @@ public Action LifeCheckTimer(Handle timer, int target) {
 }
 
 public OnAllSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
-    Echo(1, "OnAllSpawnHook: %s", name);
+    Echo(2, "OnAllSpawnHook: %s", name);
 
     int userid = GetEventInt(event, "userid");
     int client = GetClientOfUserId(userid);
@@ -522,7 +522,7 @@ public OnAllSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 }
 
 public RoundStartHook(Handle event, const char[] name, bool dontBroadcast) {
-    Echo(1, "RoundStartHook: %s", name);
+    Echo(2, "RoundStartHook: %s", name);
     StartAD();
 
     for (int i = 1; i <= MaxClients; i++) {
@@ -535,7 +535,7 @@ public RoundStartHook(Handle event, const char[] name, bool dontBroadcast) {
 }
 
 bool StopAD() {
-    Echo(1, "StopAD");
+    Echo(2, "StopAD");
 
     if (g_AD != null) {
         g_ADFreeze = true;
@@ -552,7 +552,7 @@ bool StopAD() {
 }
 
 bool StartAD() {
-    Echo(1, "StartAD");
+    Echo(2, "StartAD");
 
     if (g_AD == null) {
         g_ADFreeze = true;
@@ -570,13 +570,13 @@ bool StartAD() {
 }
 
 public Action ADTimer(Handle timer) {
-    Echo(3, "ADTimer");
+    Echo(4, "ADTimer");
 
     if (g_ADFreeze) {
         for (int i = 1; i <= MaxClients; i++) {
             if (IsClientConnected(i)) {
                 if (!IsClientInGame(i)) {
-                    Echo(1, " -- ADTimer: Client %d isn't loaded in yet.", i);
+                    Echo(2, " -- ADTimer: Client %d isn't loaded in yet.", i);
                     return Plugin_Continue;
                 }
 
@@ -592,7 +592,7 @@ public Action ADTimer(Handle timer) {
             }
         }
 
-        Echo(1, " -- ADTimer: All clients are loaded in. Assisting.");
+        Echo(2, " -- ADTimer: All clients are loaded in. Assisting.");
         g_ADFreeze = false;
 
         if (g_AutoModel) {
@@ -710,12 +710,12 @@ public Action ADTimer(Handle timer) {
         if (g_SpawnInterval > 0) {
             if (g_ADInterval >= g_SpawnInterval) {
                 if (g_ADInterval % g_SpawnInterval == 0) {
-                    Echo(1, " -- Assisting SI %d: Matching Full Team", g_ADInterval);
+                    Echo(2, " -- Assisting SI %d: Matching Full Team", g_ADInterval);
                     MkBots(teamSize * -1, 3);
                 }
 
                 else if (g_ADInterval % (g_SpawnInterval / 2) == 0) {
-                    Echo(1, " -- Assisting SI %d: Matching Half Team", g_ADInterval);
+                    Echo(2, " -- Assisting SI %d: Matching Half Team", g_ADInterval);
                     MkBots((teamSize / 2) * -1, 3);
                 }
             }
@@ -727,7 +727,7 @@ public Action ADTimer(Handle timer) {
 
 public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) {
     GetConVarName(convar, g_sB, sizeof(g_sB));
-    Echo(1, "UpdateConVarsHook: %s %s %s", g_sB, oldCv, newCv);
+    Echo(2, "UpdateConVarsHook: %s %s %s", g_sB, oldCv, newCv);
 
     char name[32];
     char value[32];
@@ -839,7 +839,7 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
 }
 
 void RegulateSI() {
-    Echo(1, "RegulateSI");
+    Echo(2, "RegulateSI");
 
     static lastSISize;
 
@@ -861,7 +861,7 @@ void RegulateSI() {
 }
 
 void RestoreDvars() {
-    Echo(1, "RestoreDvars");
+    Echo(2, "RestoreDvars");
 
     if (g_DvarsCheck && g_cvDvarsHandle != null) {
         SetConVarString(g_cvDvarsHandle, g_DvarsOriginStr);
@@ -869,7 +869,7 @@ void RestoreDvars() {
 }
 
 void AutoSetTankHp() {
-    Echo(1, "AutoSetTankHp");
+    Echo(2, "AutoSetTankHp");
 
     int tankHp;
     int teamSize = CountTeamMates(2);
@@ -887,7 +887,7 @@ void AutoSetTankHp() {
 }
 
 public OnConfigsExecuted() {
-    Echo(1, "OnConfigsExecuted");
+    Echo(2, "OnConfigsExecuted");
 
     PrecacheModels();
 
@@ -902,7 +902,7 @@ public OnConfigsExecuted() {
 }
 
 public OnClientPostAdminCheck(int client) {
-    Echo(1, "OnClientPostAdminCheck: %d", client);
+    Echo(2, "OnClientPostAdminCheck: %d", client);
 
     if (!IsFakeClient(client)) {
         if (GetQRecord(client) && !g_update) {
@@ -938,7 +938,7 @@ public OnClientPostAdminCheck(int client) {
 }
 
 public Action AutoIdleTimer(Handle timer, int client) {
-    Echo(1, "AutoIdleTimer: %d", client);
+    Echo(2, "AutoIdleTimer: %d", client);
 
     if (!IsClientValid(client)) {
         return Plugin_Stop;
@@ -959,7 +959,7 @@ public Action AutoIdleTimer(Handle timer, int client) {
 }
 
 public GoIdleHook(Handle event, const char[] name, bool dontBroadcast) {
-    Echo(1, "GoIdleHook: %s", name);
+    Echo(2, "GoIdleHook: %s", name);
     int player = GetEventInt(event, "player");
     int client = GetClientOfUserId(player);
 
@@ -972,7 +972,7 @@ public GoIdleHook(Handle event, const char[] name, bool dontBroadcast) {
 }
 
 void GoIdle(int client, int onteam=0) {
-    Echo(1, "GoIdle: %d %d", client, onteam);
+    Echo(2, "GoIdle: %d %d", client, onteam);
 
     if (GetQRecord(client)) {
         int spec_target;
@@ -1006,7 +1006,7 @@ void GoIdle(int client, int onteam=0) {
 }
 
 public CleanQDBHook(Handle event, const char[] name, bool dontBroadcast) {
-    Echo(1, "CleanQDBHook: %s", name);
+    Echo(2, "CleanQDBHook: %s", name);
 
     int userid = GetEventInt(event, "userid");
     int client = GetClientOfUserId(userid);
@@ -1014,7 +1014,7 @@ public CleanQDBHook(Handle event, const char[] name, bool dontBroadcast) {
 }
 
 void RemoveQDBKey(int client) {
-    Echo(1, "RemoveQDBKey: %d", client);
+    Echo(2, "RemoveQDBKey: %d", client);
 
     if (GetQRecord(client)) {
         g_QRecord.SetValue("update", true, true);
@@ -1029,7 +1029,7 @@ void RemoveQDBKey(int client) {
 }
 
 public Action RmBotsTimer(Handle timer, any asmany) {
-    Echo(3, "RmBotsTimer: %d", asmany);
+    Echo(4, "RmBotsTimer: %d", asmany);
 
     if (!g_IsVs) {
         RmBots(asmany, 2);
@@ -1037,14 +1037,14 @@ public Action RmBotsTimer(Handle timer, any asmany) {
 }
 
 bool IsAdmin(int client) {
-    Echo(1, "IsAdmin: %d", client);
+    Echo(2, "IsAdmin: %d", client);
     return CheckCommandAccess(
         client, "generic_admin", ADMFLAG_GENERIC, false
     );
 }
 
 bool IsClientValid(int client, int onteam=0, int mtype=2) {
-    Echo(3, "IsClientValid: %d, %d, %d", client, onteam, mtype);
+    Echo(4, "IsClientValid: %d, %d, %d", client, onteam, mtype);
 
     if (client >= 1 && client <= MaxClients) {
         if (IsClientConnected(client)) {
@@ -1068,7 +1068,7 @@ bool IsClientValid(int client, int onteam=0, int mtype=2) {
 }
 
 bool CanClientTarget(int client, int target) {
-    Echo(1, "CanClientTarget: %d %d", client, target);
+    Echo(2, "CanClientTarget: %d %d", client, target);
 
     if (client == target) {
         return true;
@@ -1096,7 +1096,7 @@ bool CanClientTarget(int client, int target) {
 }
 
 int GetPlayClient(int client) {
-    Echo(2, "GetPlayClient: %d", client);
+    Echo(3, "GetPlayClient: %d", client);
 
     if (GetQRecord(client)) {
         return g_target;
@@ -1110,7 +1110,7 @@ int GetPlayClient(int client) {
 }
 
 int ClientHomeTeam(int client) {
-    Echo(1, "ClientHomeTeam: %d", client);
+    Echo(2, "ClientHomeTeam: %d", client);
 
     if (GetQRecord(client)) {
         return g_onteam;
@@ -1128,7 +1128,7 @@ int ClientHomeTeam(int client) {
 // ================================================================== //
 
 bool SetQKey(int client) {
-    Echo(2, "SetQKey: %d", client);
+    Echo(3, "SetQKey: %d", client);
 
     if (IsClientValid(client, 0, 1)) {
         if (GetClientAuthId(client, AuthId_Steam2, g_QKey, sizeof(g_QKey), true)) {
@@ -1140,7 +1140,7 @@ bool SetQKey(int client) {
 }
 
 bool GetQRtmp(int client) {
-    Echo(2, "GetQRtmp: %d", client);
+    Echo(3, "GetQRtmp: %d", client);
 
     bool result;
     static char QKey[64];
@@ -1155,7 +1155,7 @@ bool GetQRtmp(int client) {
 }
 
 bool GetQRecord(int client) {
-    Echo(2, "GetQRecord: %d", client);
+    Echo(3, "GetQRecord: %d", client);
 
     if (SetQKey(client)) {
         if (g_QDB.GetValue(g_QKey, g_QRecord)) {
@@ -1178,7 +1178,7 @@ bool GetQRecord(int client) {
             if (g_model[0] == EOS) {
                 GetBotCharacter(client, g_model);
                 g_QRecord.SetString("model", g_model, true);
-                PrintToServer("--0: %N is model '%s'", client, g_model);
+                Echo(1, "--1: %N is model '%s'", client, g_model);
             }
 
             return true;
@@ -1189,7 +1189,7 @@ bool GetQRecord(int client) {
 }
 
 bool NewQRecord(int client) {
-    Echo(2, "NewQRecord: %d", client);
+    Echo(3, "NewQRecord: %d", client);
 
     g_QRecord = new StringMap();
 
@@ -1208,7 +1208,7 @@ bool NewQRecord(int client) {
 }
 
 int SetQRecord(int client, bool update=false) {
-    Echo(2, "SetQRecord: %d %d", client, update);
+    Echo(3, "SetQRecord: %d %d", client, update);
 
     int result = -1;
 
@@ -1231,7 +1231,7 @@ int SetQRecord(int client, bool update=false) {
 }
 
 void QueueUp(int client, int onteam) {
-    Echo(1, "QueueUp: %d %d", client, onteam);
+    Echo(2, "QueueUp: %d %d", client, onteam);
 
     if (onteam >= 2 && GetQRecord(client)) {
         Unqueue(client);
@@ -1249,7 +1249,7 @@ void QueueUp(int client, int onteam) {
 }
 
 void Unqueue(int client) {
-    Echo(1, "Unqueue: %d", client);
+    Echo(2, "Unqueue: %d", client);
 
     if (GetQRecord(client)) {
         g_QRecord.SetValue("queued", false, true);
@@ -1276,7 +1276,7 @@ void Unqueue(int client) {
 }
 
 public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
-    Echo(1, "OnSpawnHook: %s", name);
+    Echo(2, "OnSpawnHook: %s", name);
 
     int userid = GetEventInt(event, "userid");
     int target = GetClientOfUserId(userid);
@@ -1343,7 +1343,7 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 }
 
 public Action TankAssistTimer(Handle timer, any client) {
-    Echo(3, "TankAssistTimer: %d", client);
+    Echo(4, "TankAssistTimer: %d", client);
 
     /*
     * Human players on the infected team in modes that do not officially
@@ -1386,7 +1386,7 @@ public Action TankAssistTimer(Handle timer, any client) {
 }
 
 public Action ForceSpawnTimer(Handle timer, any client) {
-    Echo(3, "ForceSpawnTimer: %d", client);
+    Echo(4, "ForceSpawnTimer: %d", client);
 
     static times[MAXPLAYERS + 1] = {20, ...};
     static i;
@@ -1420,7 +1420,7 @@ public Action ForceSpawnTimer(Handle timer, any client) {
     return Plugin_Stop;
 }
 public Action OnSpawnHookTimer(Handle timer, any target) {
-    Echo(1, "OnSpawnHookTimer: %d", target);
+    Echo(2, "OnSpawnHookTimer: %d", target);
 
     if (g_sQueue.Length > 0) {
         SwitchToBot(g_sQueue.Get(0), target);
@@ -1429,7 +1429,7 @@ public Action OnSpawnHookTimer(Handle timer, any target) {
 }
 
 public OnDeathHook(Handle event, const char[] name, bool dontBroadcast) {
-    Echo(3, "OnDeathHook: %s", name);
+    Echo(4, "OnDeathHook: %s", name);
 
     int userid = GetEventInt(event, "userid");
     int client = GetClientOfUserId(userid);
@@ -1444,7 +1444,7 @@ public OnDeathHook(Handle event, const char[] name, bool dontBroadcast) {
         switch (g_onteam) {
             case 3: {
                 g_QRecord.SetString("model", "", true);
-                PrintToServer("--1: %N is model '%s'", client, "");
+                Echo(1, "--2: %N is model '%s'", client, "");
 
                 if (!g_IsVs) {
                     switch (g_OfferTakeover) {
@@ -1479,7 +1479,7 @@ public OnDeathHook(Handle event, const char[] name, bool dontBroadcast) {
 }
 
 public QTeamHook(Handle event, const char[] name, bool dontBroadcast) {
-    Echo(1, "QTeamHook: %s", name);
+    Echo(2, "QTeamHook: %s", name);
 
     int userid = GetEventInt(event, "userid");
     int client = GetClientOfUserId(userid);
@@ -1506,7 +1506,7 @@ public QTeamHook(Handle event, const char[] name, bool dontBroadcast) {
 }
 
 public Action QTeamHookTimer(Handle timer, any client) {
-    Echo(1, "QTeamHookTimer: %d", client);
+    Echo(2, "QTeamHookTimer: %d", client);
 
     if (GetQRecord(client) && !g_inspec) {
         if (g_onteam == 2) {
@@ -1518,7 +1518,7 @@ public Action QTeamHookTimer(Handle timer, any client) {
 }
 
 public QAfkHook(Handle event, const char[] name, bool dontBroadcast) {
-    Echo(1, "QAfkHook: %s", name);
+    Echo(2, "QAfkHook: %s", name);
 
     int client = GetClientOfUserId(GetEventInt(event, "player"));
     int target = GetClientOfUserId(GetEventInt(event, "bot"));
@@ -1545,7 +1545,7 @@ public QAfkHook(Handle event, const char[] name, bool dontBroadcast) {
 }
 
 public QBakHook(Handle event, const char[] name, bool dontBroadcast) {
-    Echo(1, "QBakHook: %s", name);
+    Echo(2, "QBakHook: %s", name);
 
     int client = GetClientOfUserId(GetEventInt(event, "player"));
     int target = GetClientOfUserId(GetEventInt(event, "bot"));
@@ -1567,7 +1567,7 @@ public QBakHook(Handle event, const char[] name, bool dontBroadcast) {
 // ================================================================== //
 
 void StripClient(int client) {
-    Echo(1, "StripClient: %d", client);
+    Echo(2, "StripClient: %d", client);
 
     if (IsClientValid(client)) {
         if (GetClientTeam(client) == 2) {
@@ -1579,7 +1579,7 @@ void StripClient(int client) {
 }
 
 void StripClientSlot(int client, int slot) {
-    Echo(1, "StripClientSlot: %d %d", client, slot);
+    Echo(2, "StripClientSlot: %d %d", client, slot);
 
     client = GetPlayClient(client);
 
@@ -1595,7 +1595,7 @@ void StripClientSlot(int client, int slot) {
 }
 
 void RespawnClient(int client, int target=0) {
-    Echo(1, "RespawnClient: %d %d", client, target);
+    Echo(2, "RespawnClient: %d %d", client, target);
 
     if (!IsClientValid(client)) {
         return;
@@ -1627,7 +1627,7 @@ void RespawnClient(int client, int target=0) {
 }
 
 void TeleportClient(int client, int target) {
-    Echo(1, "TeleportClient: %d %d", client, target);
+    Echo(2, "TeleportClient: %d %d", client, target);
 
     float origin[3];
     client = GetPlayClient(client);
@@ -1640,7 +1640,7 @@ void TeleportClient(int client, int target) {
 }
 
 int GetSafeSurvivor(int client) {
-    Echo(1, "GetSafeSurvivor: %d", client);
+    Echo(2, "GetSafeSurvivor: %d", client);
 
     int last_survivor;
 
@@ -1660,7 +1660,7 @@ int GetSafeSurvivor(int client) {
 }
 
 bool AddSurvivor() {
-    Echo(1, "AddSurvivor");
+    Echo(2, "AddSurvivor");
 
     if (GetClientCount(false) >= MaxClients - 1) {
         return false;
@@ -1686,7 +1686,7 @@ bool AddSurvivor() {
 }
 
 bool AddInfected(char model[32]="", int version=0) {
-    Echo(1, "AddInfected: %s %d", model, version);
+    Echo(2, "AddInfected: %s %d", model, version);
 
     if (GetClientCount(false) >= MaxClients - 1) {
         return false;
@@ -1715,7 +1715,7 @@ bool AddInfected(char model[32]="", int version=0) {
 }
 
 void GhostsModeProtector(int state) {
-    Echo(1, "GhostsModeProtector: %d", state);
+    Echo(2, "GhostsModeProtector: %d", state);
     // CAREFUL: 0 starts this function and you must close it with 1 or
     // risk breaking things. Close this with 1 immediately when done.
 
@@ -1754,7 +1754,7 @@ void GhostsModeProtector(int state) {
 }
 
 void CleanSIName(char model[32]) {
-    Echo(1, "CleanSIName: %s", model);
+    Echo(2, "CleanSIName: %s", model);
 
     int i;
     static char tmpModel[32];
@@ -1779,7 +1779,7 @@ void CleanSIName(char model[32]) {
 }
 
 void SwitchToSpec(int client, int onteam=1) {
-    Echo(1, "SwitchToSpectator: %d %d", client, onteam);
+    Echo(2, "SwitchToSpectator: %d %d", client, onteam);
 
     if (GetQRecord(client)) {
         // clearparent jockey bug switching teams (thanks to Lux)
@@ -1804,7 +1804,7 @@ void SwitchToSpec(int client, int onteam=1) {
 }
 
 void QuickCheat(int client, char [] cmd, char [] arg) {
-    Echo(1, "QuickCheat: %d %s %s", client, cmd, arg);
+    Echo(2, "QuickCheat: %d %s %s", client, cmd, arg);
 
     int flags = GetCommandFlags(cmd);
     SetCommandFlags(cmd, flags & ~FCVAR_CHEAT);
@@ -1813,7 +1813,7 @@ void QuickCheat(int client, char [] cmd, char [] arg) {
 }
 
 void SwitchToBot(int client, int target, bool si_ghost=true) {
-    Echo(1, "SwitchToBot: %d %d %d", client, target, si_ghost);
+    Echo(2, "SwitchToBot: %d %d %d", client, target, si_ghost);
 
     if (IsClientValid(target, 0, 0)) {
         switch (GetClientTeam(target)) {
@@ -1824,7 +1824,7 @@ void SwitchToBot(int client, int target, bool si_ghost=true) {
 }
 
 void Takeover(int client, int onteam) {
-    Echo(1, "Takeover: %d %d", client, onteam);
+    Echo(2, "Takeover: %d %d", client, onteam);
 
     if (GetQRecord(client)) {
         if (IsClientValid(g_target, 0, 0)) {
@@ -1866,7 +1866,7 @@ void Takeover(int client, int onteam) {
 }
 
 public Action TakeoverTimer(Handle timer, any client) {
-    Echo(3, "TakeoverTimer: %d", client);
+    Echo(4, "TakeoverTimer: %d", client);
 
     if (CountTeamMates(2) <= 0) {
         return Plugin_Handled;
@@ -1904,7 +1904,7 @@ public Action TakeoverTimer(Handle timer, any client) {
 }
 
 int CountTeamMates(int onteam, int mtype=2) {
-    Echo(1, "CountTeamMates: %d %d", onteam, mtype);
+    Echo(2, "CountTeamMates: %d %d", onteam, mtype);
 
     // mtype 0: counts only bots
     // mtype 1: counts only humans
@@ -1950,7 +1950,7 @@ int CountTeamMates(int onteam, int mtype=2) {
 }
 
 int GetClientManager(int target) {
-    Echo(3, "GetClientManager: %d", target);
+    Echo(4, "GetClientManager: %d", target);
 
     int result = -1;
     target = GetRealClient(target);
@@ -1966,7 +1966,7 @@ int GetClientManager(int target) {
 }
 
 int GetNextBot(int onteam, int skipIndex=0, alive=false) {
-    Echo(1, "GetNextBot: %d %d", onteam, skipIndex);
+    Echo(2, "GetNextBot: %d %d", onteam, skipIndex);
 
     int bot;
 
@@ -1993,7 +1993,7 @@ int GetNextBot(int onteam, int skipIndex=0, alive=false) {
 }
 
 void CycleBots(int client, int onteam) {
-    Echo(1, "CycleBots: %d %d", client, onteam);
+    Echo(2, "CycleBots: %d %d", client, onteam);
 
     if (onteam <= 1) {
         return;
@@ -2008,7 +2008,7 @@ void CycleBots(int client, int onteam) {
 }
 
 void SwitchTeam(int client, int onteam, char model[32]="") {
-    Echo(1, "SwitchTeam: %d %d", client, onteam);
+    Echo(2, "SwitchTeam: %d %d", client, onteam);
 
     if (GetQRecord(client)) {
         if (GetClientTeam(client) >= 2) {
@@ -2065,7 +2065,7 @@ void SwitchTeam(int client, int onteam, char model[32]="") {
 }
 
 public Action MkBotsCmd(int client, args) {
-    Echo(1, "MkBotsCmd: %d", client);
+    Echo(2, "MkBotsCmd: %d", client);
 
     switch(args) {
         case 2: {
@@ -2082,7 +2082,7 @@ public Action MkBotsCmd(int client, args) {
 }
 
 void MkBots(int asmany, int onteam) {
-    Echo(1, "MkBots: %d %d", asmany, onteam);
+    Echo(2, "MkBots: %d %d", asmany, onteam);
 
     if (asmany < 0) {
         asmany = asmany * -1 - CountTeamMates(onteam);
@@ -2102,7 +2102,7 @@ void MkBots(int asmany, int onteam) {
 }
 
 public Action MkBotsTimer(Handle timer, Handle pack) {
-    Echo(1, "MkBotsTimer");
+    Echo(2, "MkBotsTimer");
 
     static i;
 
@@ -2124,7 +2124,7 @@ public Action MkBotsTimer(Handle timer, Handle pack) {
 }
 
 public Action RmBotsCmd(int client, args) {
-    Echo(1, "RmBotsCmd: %d", client);
+    Echo(2, "RmBotsCmd: %d", client);
 
     int asmany;
     int onteam;
@@ -2150,7 +2150,7 @@ public Action RmBotsCmd(int client, args) {
 }
 
 void RmBots(int asmany, int onteam) {
-    Echo(1, "RmBots: %d %d", asmany, onteam);
+    Echo(2, "RmBots: %d %d", asmany, onteam);
 
     int j;
 
@@ -2192,7 +2192,7 @@ void RmBots(int asmany, int onteam) {
 // ================================================================== //
 
 public Action AutoModelTimer(Handle timer, int client) {
-    Echo(4, "AutoModelTimer: %d", client);
+    Echo(5, "AutoModelTimer: %d", client);
 
     if (g_AutoModel && IsClientValid(client, 2)) {
         static int realClient;
@@ -2251,7 +2251,7 @@ public Action AutoModelTimer(Handle timer, int client) {
         // might be unnecessary
         if (GetQRecord(realClient)) {
             g_QRecord.SetString("model", g_SurvivorNames[index], true);
-            PrintToServer("--9: %N is model '%s'", realClient, g_SurvivorNames[index]);
+            Echo(1, "--3: %N is model '%s'", realClient, g_SurvivorNames[index]);
         }
 
 //         PrintToServer("\n");
@@ -2264,19 +2264,19 @@ public Action AutoModelTimer(Handle timer, int client) {
 }
 
 void PrecacheModels() {
-    Echo(1, "PrecacheModels");
+    Echo(2, "PrecacheModels");
 
     for (int i = 0; i < sizeof(g_SurvivorPaths); i++) {
         Format(g_sB, sizeof(g_sB), "%s", g_SurvivorPaths[i]);
         if (!IsModelPrecached(g_sB)) {
             int retcode = PrecacheModel(g_sB);
-            Echo(1, " - Precaching Survivor %s, retcode: %d", g_sB, retcode);
+            Echo(2, " - Precaching Survivor %s, retcode: %d", g_sB, retcode);
         }
     }
 }
 
 void AssignModel(int client, char [] model) {
-    Echo(1, "AssignModel: %d %s", client, model);
+    Echo(2, "AssignModel: %d %s", client, model);
 
     if (GetClientTeam(client) != 2 || IsClientsModel(client, model)) {
         return;
@@ -2301,14 +2301,14 @@ void AssignModel(int client, char [] model) {
 
             if (GetQRecord(realClient)) {
                 g_QRecord.SetString("model", g_pN, true);
-                PrintToServer("--3: %N is model '%s'", client, g_pN);
+                Echo(1, "--4: %N is model '%s'", realClient, g_pN);
             }
         }
     }
 }
 
 int GetClientModelIndex(int client) {
-    Echo(2, "GetClientModelIndex: %d", client);
+    Echo(3, "GetClientModelIndex: %d", client);
 
     if (!IsClientValid(client)) {
         return -2;
@@ -2327,7 +2327,7 @@ int GetClientModelIndex(int client) {
 }
 
 int GetModelIndexByName(char [] name, int onteam=2) {
-    Echo(1, "GetModelIndexByName: %s %d", name, onteam);
+    Echo(2, "GetModelIndexByName: %s %d", name, onteam);
 
     if (onteam == 2) {
         for (int i; i < sizeof(g_SurvivorNames); i++) {
@@ -2349,7 +2349,7 @@ int GetModelIndexByName(char [] name, int onteam=2) {
 }
 
 bool IsClientsModel(int client, char [] name) {
-    Echo(1, "IsClientsModel: %d %s", client, name);
+    Echo(2, "IsClientsModel: %d %s", client, name);
 
     int modelIndex = GetClientModelIndex(client);
     Format(g_sB, sizeof(g_sB), "%s", g_SurvivorNames[modelIndex]);
@@ -2361,12 +2361,12 @@ bool IsClientsModel(int client, char [] name) {
 // ================================================================== //
 
 int GetOS() {
-    Echo(1, "GetOS");
+    Echo(2, "GetOS");
     return GameConfGetOffset(g_GameData, "OS");
 }
 
 void RoundRespawnSig(int client) {
-    Echo(1, "RoundRespawnSig: %d", client);
+    Echo(2, "RoundRespawnSig: %d", client);
 
     static Handle hRoundRespawn;
     if (hRoundRespawn == null) {
@@ -2386,7 +2386,7 @@ void RoundRespawnSig(int client) {
 }
 
 void SetHumanSpecSig(int bot, int client) {
-    Echo(1, "SetHumanSpecSig: %d %d", bot, client);
+    Echo(2, "SetHumanSpecSig: %d %d", bot, client);
 
     static Handle hSpec;
     if (hSpec == null) {
@@ -2407,7 +2407,7 @@ void SetHumanSpecSig(int bot, int client) {
 }
 
 void State_TransitionSig(int client, int mode) {
-    Echo(1, "State_TransitionSig: %d %d", client, mode);
+    Echo(2, "State_TransitionSig: %d %d", client, mode);
 
     static Handle hSpec;
     if (hSpec == null) {
@@ -2428,7 +2428,7 @@ void State_TransitionSig(int client, int mode) {
 }
 
 bool TakeoverBotSig(int client, int target) {
-    Echo(1, "TakeoverBotSig: %d %d", client, target);
+    Echo(2, "TakeoverBotSig: %d %d", client, target);
 
     if (!GetQRecord(client)) {
         return false;
@@ -2453,7 +2453,7 @@ bool TakeoverBotSig(int client, int target) {
                 GetQRecord(client);
                 GetBotCharacter(target, g_model);
                 g_QRecord.SetString("model", g_model, true);
-                PrintToServer("--4: %N is model '%s'", client, g_model);
+                Echo(1, "--5: %N is model '%s'", client, g_model);
             }
 
             SwitchToSpec(client);
@@ -2481,7 +2481,7 @@ bool TakeoverBotSig(int client, int target) {
 }
 
 bool TakeoverZombieBotSig(int client, int target, bool si_ghost) {
-    Echo(1, "TakeoverZombieBotSig: %d %d %d", client, target, si_ghost);
+    Echo(2, "TakeoverZombieBotSig: %d %d %d", client, target, si_ghost);
 
     if (!GetQRecord(client)) {
         return false;
@@ -2543,7 +2543,7 @@ bool TakeoverZombieBotSig(int client, int target, bool si_ghost) {
 // ================================================================== //
 
 public Action TeleportClientCmd(int client, args) {
-    Echo(1, "TeleportClientCmd: %d", client);
+    Echo(2, "TeleportClientCmd: %d", client);
 
     int level;
 
@@ -2570,7 +2570,7 @@ public Action TeleportClientCmd(int client, args) {
 }
 
 public TeleportClientHandler(int client, int level) {
-    Echo(1, "TeleportClientHandler: %d %d", client, level);
+    Echo(2, "TeleportClientHandler: %d %d", client, level);
 
     if (!RegMenuHandler(client, "TeleportClientHandler", level, 0)) {
         return;
@@ -2599,7 +2599,7 @@ public TeleportClientHandler(int client, int level) {
 }
 
 public Action SwitchTeamCmd(int client, args) {
-    Echo(1, "SwitchTeamCmd: %d", client);
+    Echo(2, "SwitchTeamCmd: %d", client);
 
     int level;
 
@@ -2633,7 +2633,7 @@ public Action SwitchTeamCmd(int client, args) {
     if (menuArg1 == 3 && GetQRecord(menuArg0)) {
         CleanSIName(model);
         g_QRecord.SetString("model", model, true);
-        PrintToServer("--6: %N is model '%s'", menuArg0, model);
+        Echo(1, "--7: %N is model '%s'", menuArg0, model);
     }
 
     SwitchTeamHandler(client, level);
@@ -2641,7 +2641,7 @@ public Action SwitchTeamCmd(int client, args) {
 }
 
 public SwitchTeamHandler(int client, int level) {
-    Echo(1, "SwitchTeamHandler: %d %d", client, level);
+    Echo(2, "SwitchTeamHandler: %d %d", client, level);
 
     if (!RegMenuHandler(client, "SwitchTeamHandler", level, 0)) {
         return;
@@ -2671,7 +2671,7 @@ public SwitchTeamHandler(int client, int level) {
 }
 
 public Action AssignModelCmd(int client, args) {
-    Echo(1, "AssignModelCmd: %d", client);
+    Echo(2, "AssignModelCmd: %d", client);
 
     int level;
 
@@ -2699,7 +2699,7 @@ public Action AssignModelCmd(int client, args) {
 }
 
 public AssignModelHandler(int client, int level) {
-    Echo(1, "AssignModelHandler: %d %d", client, level);
+    Echo(2, "AssignModelHandler: %d %d", client, level);
 
     if (!RegMenuHandler(client, "AssignModelHandler", level, 0)) {
         return;
@@ -2728,7 +2728,7 @@ public AssignModelHandler(int client, int level) {
 }
 
 public Action SwitchToBotCmd(int client, args) {
-    Echo(1, "SwitchToBotCmd: %d", client);
+    Echo(2, "SwitchToBotCmd: %d", client);
 
     int level;
 
@@ -2761,7 +2761,7 @@ public Action SwitchToBotCmd(int client, args) {
 }
 
 public SwitchToBotHandler(int client, int level) {
-    Echo(1, "SwitchToBotHandler: %d %d", client, level);
+    Echo(2, "SwitchToBotHandler: %d %d", client, level);
 
     int homeTeam = ClientHomeTeam(client);
     if (!RegMenuHandler(client, "SwitchToBotHandler", level, 0)) {
@@ -2798,7 +2798,7 @@ public SwitchToBotHandler(int client, int level) {
 }
 
 public Action RespawnClientCmd(int client, args) {
-    Echo(1, "RespawnClientCmd: %d", client);
+    Echo(2, "RespawnClientCmd: %d", client);
 
     int level;
 
@@ -2826,7 +2826,7 @@ public Action RespawnClientCmd(int client, args) {
 }
 
 public RespawnClientHandler(int client, int level) {
-    Echo(1, "RespawnClientHandler: %d %d", client, level);
+    Echo(2, "RespawnClientHandler: %d %d", client, level);
 
     if (!RegMenuHandler(client, "RespawnClientHandler", level, 0)) {
         return;
@@ -2855,7 +2855,7 @@ public RespawnClientHandler(int client, int level) {
 }
 
 public Action CycleBotsCmd(int client, args) {
-    Echo(1, "CycleBotsCmd: %d", client);
+    Echo(2, "CycleBotsCmd: %d", client);
 
     int level;
 
@@ -2887,7 +2887,7 @@ public Action CycleBotsCmd(int client, args) {
 }
 
 public CycleBotsHandler(int client, int level) {
-    Echo(1, "CycleBotsHandler: %d %d", client, level);
+    Echo(2, "CycleBotsHandler: %d %d", client, level);
 
     if (!RegMenuHandler(client, "CycleBotsHandler", level, 0)) {
         return;
@@ -2918,7 +2918,7 @@ public CycleBotsHandler(int client, int level) {
 }
 
 public Action StripClientCmd(int client, args) {
-    Echo(1, "StripClientCmd: %d", client);
+    Echo(2, "StripClientCmd: %d", client);
 
     int target;
     int level;
@@ -2953,7 +2953,7 @@ public Action StripClientCmd(int client, args) {
 }
 
 public StripClientHandler(int client, int level) {
-    Echo(1, "StripClientHandler: %d %d", client, level);
+    Echo(2, "StripClientHandler: %d %d", client, level);
 
     if (!RegMenuHandler(client, "StripClientHandler", level, 0)) {
         return;
@@ -2982,7 +2982,7 @@ public StripClientHandler(int client, int level) {
 }
 
 public Action ResetCmd(int client, args) {
-    Echo(1, "ResetCmd: %d", client);
+    Echo(2, "ResetCmd: %d", client);
 
     for (int i = 1; i <= MaxClients; i++) {
         GenericMenuCleaner(i);
@@ -2993,7 +2993,7 @@ public Action ResetCmd(int client, args) {
 }
 
 bool RegMenuHandler(int client, char [] handler, int level, int clearance=0) {
-    Echo(1, "RegMenuHandler: %d %s %d %d", client, handler, level, clearance);
+    Echo(2, "RegMenuHandler: %d %s %d %d", client, handler, level, clearance);
 
     g_callBacks.PushString(handler);
     if (!IsAdmin(client) && level <= clearance) {
@@ -3005,7 +3005,7 @@ bool RegMenuHandler(int client, char [] handler, int level, int clearance=0) {
 }
 
 public Action MainMenuCmd(int client, args) {
-    Echo(1, "MainMenuCmd: %d", client);
+    Echo(2, "MainMenuCmd: %d", client);
 
     GenericMenuCleaner(client);
     MainMenuHandler(client, 0);
@@ -3013,7 +3013,7 @@ public Action MainMenuCmd(int client, args) {
 }
 
 public MainMenuHandler(int client, int level) {
-    Echo(1, "MainMenuHandler: %d %d", client, level);
+    Echo(2, "MainMenuHandler: %d %d", client, level);
 
     if (!RegMenuHandler(client, "MainMenuHandler", level, 0)) {
         return;
@@ -3046,7 +3046,7 @@ public MainMenuHandler(int client, int level) {
 // ================================================================== //
 
 void GenericMenuCleaner(int client, bool clearStack=true) {
-    Echo(1, "GenericMenuCleaner: %d %d", client, clearStack);
+    Echo(2, "GenericMenuCleaner: %d %d", client, clearStack);
 
     for (int i = 0; i < sizeof(g_menuItems[]); i++) {
         g_menuItems[client][i] = 0;
@@ -3062,7 +3062,7 @@ void GenericMenuCleaner(int client, bool clearStack=true) {
 }
 
 public GenericMenuHandler(Menu menu, MenuAction action, int param1, int param2) {
-    Echo(1, "GenericMenuHandler: %d %d", param1, param2);
+    Echo(2, "GenericMenuHandler: %d %d", param1, param2);
 
     int client = param1;
     int i;  // -1;
@@ -3146,7 +3146,7 @@ public GenericMenuHandler(Menu menu, MenuAction action, int param1, int param2) 
 // ================================================================== //
 
 void MainMenu(int client, char [] title) {
-    Echo(1, "MainMenu: %d %s", client, title);
+    Echo(2, "MainMenu: %d %s", client, title);
 
     Menu menu = new Menu(GenericMenuHandler);
     menu.SetTitle(title);
@@ -3163,7 +3163,7 @@ void MainMenu(int client, char [] title) {
 }
 
 void InvSlotsMenu(int client, int target, char [] title) {
-    Echo(1, "InvSlotsMenu: %d %d %s", client, target, title);
+    Echo(2, "InvSlotsMenu: %d %d %s", client, target, title);
 
     int ent;
     char weapon[64];
@@ -3186,7 +3186,7 @@ void InvSlotsMenu(int client, int target, char [] title) {
 }
 
 void ModelsMenu(int client, char [] title) {
-    Echo(1, "ModelsMenu: %d %s", client, title);
+    Echo(2, "ModelsMenu: %d %s", client, title);
 
     Menu menu = new Menu(GenericMenuHandler);
     menu.SetTitle(title);
@@ -3202,7 +3202,7 @@ void ModelsMenu(int client, char [] title) {
 }
 
 void TeamsMenu(int client, char [] title, bool all=true) {
-    Echo(1, "TeamsMenu: %d %s %d", client, title, all);
+    Echo(2, "TeamsMenu: %d %s %d", client, title, all);
 
     Menu menu = new Menu(GenericMenuHandler);
     menu.SetTitle(title);
@@ -3224,7 +3224,7 @@ void TeamsMenu(int client, char [] title, bool all=true) {
 
 void TeamMatesMenu(int client, char [] title, int mtype=2, int target=0, bool incDead=true,
             bool repeat=false, int homeTeam=0) {
-    Echo(1, "TeamMatesMenu: %d %s %d %d %d %d %d", client, title, mtype, target, incDead, repeat, homeTeam);
+    Echo(2, "TeamMatesMenu: %d %s %d %d %d %d %d", client, title, mtype, target, incDead, repeat, homeTeam);
 
     Menu menu = new Menu(GenericMenuHandler);
     menu.SetTitle(title);
@@ -3342,7 +3342,7 @@ void Echo(int level, char [] format, any ...) {
 }
 
 void QDBCheckCmd(client) {
-    Echo(1, "QDBCheckCmd");
+    Echo(2, "QDBCheckCmd");
 
     PrintToConsole(client, "-- STAT: QDB Size is %d", g_QDB.Size);
     PrintToConsole(client, "-- MinPlayers is %d", g_MinPlayers);
@@ -3372,7 +3372,7 @@ void QDBCheckCmd(client) {
 }
 
 public Action QuickClientPrintCmd(int client, args) {
-    Echo(1, "QuickClientPrintCmd: %d", client);
+    Echo(2, "QuickClientPrintCmd: %d", client);
 
     int onteam;
     int state;
