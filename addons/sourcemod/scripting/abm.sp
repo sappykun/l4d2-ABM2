@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.61"
+#define PLUGIN_VERSION "0.1.62"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -85,7 +85,6 @@ int g_target;                       // g_QDB player (human or bot) id
 int g_lastid;                       // g_QDB client's last known bot id
 int g_onteam = 1;                   // g_QDB client's team
 char g_model[64];                   // g_QDB client's model
-char g_ghost[64];                   // g_QDB client model backup (for activation)
 bool g_queued;                      // g_QDB client's takeover state
 float g_origin[3];                  // g_QDB client's origin vector
 bool g_inspec;                      // g_QDB check client's specator mode
@@ -372,13 +371,12 @@ public RoundFreezeEndHook(Handle event, const char[] name, bool dontBroadcast) {
             g_QDB.GetValue(g_sB, g_QRecord);
             g_QRecord.GetValue("onteam", g_onteam);
             g_QRecord.GetValue("client", g_client);
-            g_QRecord.GetString("model", g_model, sizeof(g_model));
-            g_QRecord.SetString("ghost", g_model, true);
 
             if (g_onteam == 3) {
                 SwitchToSpec(g_client);
                 g_QRecord.SetValue("queued", true, true);
                 g_QRecord.SetValue("inspec", false, true);
+                g_QRecord.SetString("model", "", true);
             }
         }
     }
@@ -399,7 +397,6 @@ void PlayerActivate(int client) {
 
     if (GetQRecord(client)) {
         StartAD();
-        AssignModel(client, g_ghost);
 
         if (!g_IsVs) {
             if (g_onteam == 3) {
@@ -439,12 +436,73 @@ int GetRealClient(int client) {
     return client;
 }
 
-public Action LifeCheckTimer(Handle timer, int client) {
-    Echo(1, "LifeCheckTimer: %d", client);
+void GetBotCharacter(int client, char strBuffer[64]) {
+    Echo(1, "GetBotCharacter: %d", client);
 
-    if (GetQRecord(GetRealClient(client))) {
-        int status = IsPlayerAlive(client);
+    strBuffer = "";
+
+    if (IsClientValid(client)) {
+        if (IsFakeClient(client)) {
+            GetClientName(client, strBuffer, sizeof(strBuffer));
+            int i = FindCharInString(strBuffer, ')');
+
+            if (i != -1) {
+                strcopy(strBuffer, sizeof(strBuffer), strBuffer[i + 1]);
+            }
+
+            return;
+        }
+
+        switch (GetClientTeam(client)) {
+            case 2: {
+                GetEntPropString(client, Prop_Data, "m_ModelName", g_sB, sizeof(g_sB));
+                for (int i = 0; i < sizeof(g_SurvivorPaths); i++) {
+                    if (StrEqual(g_SurvivorPaths[i], g_sB)) {
+                        Format(strBuffer, sizeof(strBuffer), g_SurvivorNames[i]);
+                        break;
+                    }
+                }
+            }
+
+            case 3: {
+                if (IsPlayerAlive(client)) {
+                    int flag = GetEntProp(client, Prop_Send, "m_isGhost");
+                    SetEntProp(client, Prop_Send, "m_isGhost", 0);
+
+                    switch (GetEntProp(client, Prop_Send, "m_zombieClass")) {
+                        case 1: strBuffer = "Smoker";
+                        case 2: strBuffer = "Boomer";
+                        case 3: strBuffer = "Hunter";
+                        case 4: strBuffer = "Spitter";
+                        case 5: strBuffer = "Jockey";
+                        case 6: strBuffer = "Charger";
+                        case 8: strBuffer = "Tank";
+                    }
+
+                    SetEntProp(client, Prop_Send, "m_isGhost", flag);
+                }
+            }
+        }
+    }
+}
+
+public Action LifeCheckTimer(Handle timer, int target) {
+    Echo(1, "LifeCheckTimer: %d", target);
+
+    if (GetQRecord(GetRealClient(target))) {
+        int status = IsPlayerAlive(target);
+
+        switch (g_model[0] != EOS) {
+            case 1: AssignModel(target, g_model);
+            case 0: {
+                GetBotCharacter(target, g_model);
+                g_QRecord.SetString("model", g_model, true);
+                PrintToServer("--6: %N is model '%s'", g_client, g_model);
+            }
+        }
+
         g_QRecord.SetValue("status", status, true);
+        AssignModel(g_client, g_model);
     }
 }
 
@@ -1096,17 +1154,14 @@ bool GetQRecord(int client) {
             g_QRecord.GetValue("inspec", g_inspec);
             g_QRecord.GetValue("status", g_status);
             g_QRecord.GetValue("update", g_update);
+            g_QRecord.GetString("model", g_model, sizeof(g_model));
 
-            if (GetClientTeam(client) == 2) {
-                int i = GetClientModelIndex(client);
-                if (i >= 0) {
-                    Format(g_model, sizeof(g_model), "%s", g_SurvivorNames[i]);
-                    g_QRecord.SetString("model", g_model, true);
-                }
+            if (g_model[0] == EOS) {
+                GetBotCharacter(client, g_model);
+                g_QRecord.SetString("model", g_model, true);
+                PrintToServer("--0: %N is model '%s'", client, g_model);
             }
 
-            g_QRecord.GetString("model", g_model, sizeof(g_model));
-            g_QRecord.GetString("ghost", g_ghost, sizeof(g_ghost));
             return true;
         }
     }
@@ -1130,7 +1185,6 @@ bool NewQRecord(int client) {
     g_QRecord.SetValue("status", true, true);
     g_QRecord.SetValue("update", false, true);
     g_QRecord.SetString("model", "", true);
-    g_QRecord.SetString("ghost", "", true);
     return true;
 }
 
@@ -1264,10 +1318,7 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
     }
 
     if (onteam == 2) {
-        if (g_AutoModel) {
-            CreateTimer(0.2, AutoModelTimer, target);
-        }
-
+        CreateTimer(0.2, AutoModelTimer, target);
         CreateTimer(0.4, OnSpawnHookTimer, target);
     }
 }
@@ -1373,6 +1424,9 @@ public OnDeathHook(Handle event, const char[] name, bool dontBroadcast) {
 
         switch (g_onteam) {
             case 3: {
+                g_QRecord.SetString("model", "", true);
+                PrintToServer("--1: %N is model '%s'", client, "");
+
                 if (!g_IsVs) {
                     switch (g_OfferTakeover) {
                         case 2, 3: {
@@ -1419,9 +1473,10 @@ public QTeamHook(Handle event, const char[] name, bool dontBroadcast) {
             g_QRecord.SetValue("onteam", onteam, true);
             g_QRecord.SetValue("queued", false, true);
 
-            if (onteam == 3) {
-                g_QRecord.SetString("model", "", true);
-                return;
+            // attempt to apply a model asap
+            if (g_ADFreeze && onteam == 2 && g_model[0] != EOS) {
+                PrintToServer("Still Frozen, Assigning %s Model to %N", g_model, client);
+                AssignModel(client, g_model);
             }
         }
 
@@ -1480,14 +1535,6 @@ public QBakHook(Handle event, const char[] name, bool dontBroadcast) {
         if (g_target != target) {
             g_QRecord.SetValue("lastid", target);
             g_QRecord.SetValue("target", client);
-
-            GetClientName(target, g_pN, sizeof(g_pN));
-            int i = GetModelIndexByName(g_pN);
-
-            if (i != -1) {
-                Format(g_model, sizeof(g_model), "%s", g_SurvivorNames[i]);
-                g_QRecord.SetString("model", g_model, true);
-            }
         }
 
         if (GetClientTeam(client) == 2) {
@@ -1711,8 +1758,18 @@ void SwitchToSpec(int client, int onteam=1) {
         g_QRecord.SetValue("inspec", true, true);
         ChangeClientTeam(client, onteam);
 
-        if (client != g_target) {
-            SetEntProp(g_target, Prop_Send, "m_humanSpectatorUserID", 0);
+        if (GetRealClient(g_target) == client) {
+            switch (g_onteam) {
+                case 2: AssignModel(g_target, g_model);
+                case 3: {
+                    g_QRecord.SetString("model", "", true);
+                    PrintToServer("--2: %N is model '%s'", client, "");
+                }
+            }
+
+            if (HasEntProp(g_target, Prop_Send, "m_humanSpectatorUserID")) {
+                SetEntProp(g_target, Prop_Send, "m_humanSpectatorUserID", 0);
+            }
         }
     }
 }
@@ -1957,15 +2014,11 @@ void SwitchTeam(int client, int onteam, char model[32]="") {
                             return;
                         }
 
-                        switch (g_model[0] == EOS && model[0] != EOS) {
-                            case 1: CleanSIName(model);
-                            case 0: {
-                                Format(model, sizeof(model), "%s", g_model);
-                                CleanSIName(model);
-                            }
+                        switch (g_model[0] != EOS) {
+                            case 1: Format(model, sizeof(model), "%s", g_model);
+                            case 0: CleanSIName(model);
                         }
 
-                        g_QRecord.SetString("model", model, true);
                         QueueUp(client, 3);
                         AddInfected(model, 1);
                         return;
@@ -2105,50 +2158,75 @@ void RmBots(int asmany, int onteam) {
 // MODEL FEATURES
 // ================================================================== //
 
-public Action AutoModelTimer(Handle timer, any client) {
-    Echo(1, "AutoModelTimer: %d", client);
+public Action AutoModelTimer(Handle timer, int client) {
+    Echo(4, "AutoModelTimer: %d", client);
 
-    if (!IsClientValid(client)) {
-        return Plugin_Handled;
-    }
+    if (g_AutoModel && IsClientValid(client, 2)) {
+        static int realClient;
+        realClient = GetRealClient(client);
+        if (GetQRecord(realClient) && g_model[0] != EOS) {
+            return Plugin_Handled;
+        }
 
-    int target = GetClientManager(client);
-    if (GetQRecord(target) && g_model[0] != EOS) {
-        return Plugin_Handled;
-    }
+        static set;
+        set = GetClientModelIndex(client);
+        switch (set >= 0 && set <= 3) {
+            case 1: set = 0;  // l4d2 survivor set
+            case 0: set = 4;  // l4d1 survivor set
+        }
 
-    int smq[8];  // survivor model queue
-    int model;
-    int count;
+        int models[8];
+        static int index;
 
-    for (int i = 1; i <= MaxClients; i++) {
-        if (IsClientValid(i) && GetClientTeam(i) == 2) {
-            model = GetClientModelIndex(i);
+        for (int i = 1; i <= MaxClients; i++) {
+            if (client == i) {
+                continue;
+            }
 
-            if (model != -1) {
-                smq[model]++;
+            index = -1;
+
+            if (IsClientValid(i, 0, 1)) {
+                if (GetQRecord(i) && g_onteam == 2 && g_model[0] != EOS) {
+                    index = GetModelIndexByName(g_model, 2);
+                }
+            }
+
+            else if (IsClientValid(i, 2, 0)) {
+                if (GetRealClient(i) == i && IsPlayerAlive(i)) {
+                    index = GetClientModelIndex(i);
+                }
+            }
+
+            if (index >= 0) {
+                models[index]++;
             }
         }
-    }
 
-    model = GetClientModelIndex(client);
-    if (model == -1) model = 0;
-    count = smq[model];
-
-    if (count <= 1 || count <= CountTeamMates(2) / 8) {
-        return Plugin_Handled;
-    }
-
-    for (int i = 1; i <= (MaxClients / 8) + 1; i++) {
-        for (model = 0; model < 8; model++) {
-            if (smq[model] < i) {
-                i = MaxClients;
-                break;
+        for (int i = 0; i < 4; i++) {
+            for (index = set; index < sizeof(models); index++) {
+                if (models[index] <= i) {
+                    models[index]++;
+                    AssignModel(client, g_SurvivorNames[index]);
+                    i = 4;  // we want to fall through
+                    break;
+                }
             }
+
+            set = 0;
         }
+
+        // might be unnecessary
+        if (GetQRecord(realClient)) {
+            g_QRecord.SetString("model", g_SurvivorNames[index], true);
+            PrintToServer("--9: %N is model '%s'", realClient, g_SurvivorNames[index]);
+        }
+
+//         PrintToServer("\n");
+//         for (int i = 0; i < sizeof(models); i++) {
+//             PrintToServer("2: %s: %d", g_SurvivorNames[i], models[i]);
+//         }
     }
 
-    AssignModel(client, g_SurvivorNames[model]);
     return Plugin_Handled;
 }
 
@@ -2173,9 +2251,9 @@ void AssignModel(int client, char [] model) {
 
     if (IsClientValid(client)) {
         int i = GetModelIndexByName(model);
+        int realClient = GetRealClient(client);
 
         if (i >= 0 && i < sizeof(g_SurvivorPaths)) {
-
             switch(i == 5) {
                 case 1: SetEntProp(client, Prop_Send, "m_survivorCharacter", g_Zoey);
                 case 0: SetEntProp(client, Prop_Send, "m_survivorCharacter", i);
@@ -2186,15 +2264,11 @@ void AssignModel(int client, char [] model) {
 
             if (IsFakeClient(client)) {
                 SetClientInfo(client, "name", g_pN);
-                int boss = GetClientManager(client);
-
-                if (boss > 0) {
-                    client = boss;
-                }
             }
 
-            if (GetQRecord(client)) {
-                g_QRecord.SetString("model", g_pN);
+            if (GetQRecord(realClient)) {
+                g_QRecord.SetString("model", g_pN, true);
+                PrintToServer("--3: %N is model '%s'", client, g_pN);
             }
         }
     }
@@ -2514,7 +2588,9 @@ public Action SwitchTeamCmd(int client, args) {
     }
 
     if (menuArg1 == 3 && GetQRecord(menuArg0)) {
-        g_QRecord.SetString("model", model);
+        CleanSIName(model);
+        g_QRecord.SetString("model", model, true);
+        PrintToServer("--6: %N is model '%s'", menuArg0, model);
     }
 
     SwitchTeamHandler(client, level);
@@ -3247,12 +3323,12 @@ void QDBCheckCmd(client) {
             PrintToConsole(client, " - Queued: %d", g_queued);
             PrintToConsole(client, " - InSpec: %d", g_inspec);
 
-            if (GetClientTeam(i) == 2) {
-                int j = GetClientModelIndex(i);
-                if (j != -1) {
-                    PrintToConsole(client, " - Initialized Model: %s", g_SurvivorNames[j]);
-                }
-            }
+//             if (GetClientTeam(i) == 2) {
+//                 int j = GetClientModelIndex(i);
+//                 if (j != -1) {
+//                     PrintToConsole(client, " - Initialized Model: %s", g_SurvivorNames[j]);
+//                 }
+//             }
 
             PrintToConsole(client, " - Model: %s", g_model);
             PrintToConsole(client, " -\n");
