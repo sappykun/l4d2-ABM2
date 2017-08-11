@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.65"
+#define PLUGIN_VERSION "0.1.66"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -1662,7 +1662,12 @@ int GetSafeSurvivor(int client) {
 bool AddSurvivor() {
     Echo(1, "AddSurvivor");
 
-    int i = CreateFakeClient("ABMclient");
+    if (GetClientCount(false) >= MaxClients - 1) {
+        return false;
+    }
+
+    static i;
+    i = CreateFakeClient("ABMclient2");
     bool result;
 
     if (IsClientValid(i)) {
@@ -1683,8 +1688,13 @@ bool AddSurvivor() {
 bool AddInfected(char model[32]="", int version=0) {
     Echo(1, "AddInfected: %s %d", model, version);
 
+    if (GetClientCount(false) >= MaxClients - 1) {
+        return false;
+    }
+
     CleanSIName(model);
-    int i = CreateFakeClient("ABMclient");
+    static i;
+    i = CreateFakeClient("ABMclient3");
 
     if (IsClientValid(i)) {
         ChangeClientTeam(i, 3);
@@ -3390,4 +3400,3 @@ public Action QuickClientPrintCmd(int client, args) {
 
     QDBCheckCmd(client);
 }
-
