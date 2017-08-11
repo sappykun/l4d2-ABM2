@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.64"
+#define PLUGIN_VERSION "0.1.65"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -124,6 +124,7 @@ ConVar g_cvOfferTakeover;
 ConVar g_cvStripKick;
 ConVar g_cvAutoModel;
 ConVar g_cvKeepDead;
+ConVar g_cvMaxSwitches;
 
 int g_LogLevel;
 int g_MinPlayers;
@@ -226,6 +227,7 @@ public OnPluginStart() {
 
     g_cvTankHealth = FindConVar("z_tank_health");
     g_cvDvarsHandle = FindConVar("l4d2_directoroptions_overwrite");
+    g_cvMaxSwitches = FindConVar("vs_max_team_switches");
     g_cvGameMode = FindConVar("mp_gamemode");
     UpdateGameMode();
 
@@ -2026,8 +2028,12 @@ void SwitchTeam(int client, int onteam, char model[32]="") {
 
                     if (onteam == 3) {
 
-                        if (g_IsVs) {
-                            ChangeClientTeam(client, 3);
+                        if (g_IsVs) {  // see if a proper way to get on team 2 exist
+                            static switches;  // A Lux idea
+                            switches = GetConVarInt(g_cvMaxSwitches);
+                            SetConVarInt(g_cvMaxSwitches, 9999);
+                            ChangeClientTeam(client, onteam);
+                            SetConVarInt(g_cvMaxSwitches, switches);
                             return;
                         }
 
