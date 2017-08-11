@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.60"
+#define PLUGIN_VERSION "0.1.61"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -412,22 +412,20 @@ void PlayerActivate(int client) {
 int GetRealClient(int client) {
     Echo(1, "GetRealClient: %d", client);
 
-    if (IsClientValid(client)) {
-        if (IsFakeClient(client)) {
-            if (HasEntProp(client, Prop_Send, "m_humanSpectatorUserID")) {
-                int userid = GetEntProp(client, Prop_Send, "m_humanSpectatorUserID");
-                int target = GetClientOfUserId(userid);
+    if (IsClientValid(client, 0)) {
+        if (HasEntProp(client, Prop_Send, "m_humanSpectatorUserID")) {
+            int userid = GetEntProp(client, Prop_Send, "m_humanSpectatorUserID");
+            int target = GetClientOfUserId(userid);
 
-                if (IsClientValid(target)) {
-                    client = target;
-                }
+            if (IsClientValid(target)) {
+                client = target;
+            }
 
-                else {
-                    for (int i = 1; i <= MaxClients; i++) {
-                        if (GetQRecord(i) && g_target == client) {
-                            client = i;
-                            break;
-                        }
+            else {
+                for (int i = 1; i <= MaxClients; i++) {
+                    if (GetQRecord(i) && g_target == client) {
+                        client = i;
+                        break;
                     }
                 }
             }
@@ -534,6 +532,14 @@ public Action ADTimer(Handle timer) {
 
         Echo(1, " -- ADTimer: All clients are loaded in. Assisting.");
         g_ADFreeze = false;
+
+        if (g_AutoModel) {
+            for (int i = 1; i <= MaxClients; i++) {
+                if (IsClientValid(i, 2, 0)) {
+                    CreateTimer(0.2, AutoModelTimer, i);
+                }
+            }
+        }
     }
 
     g_ADInterval++;
@@ -567,12 +573,19 @@ public Action ADTimer(Handle timer) {
                 continue;
             }
 
-            if (!g_inspec && onteam <= 1) {
+            if (g_ADInterval == 1 && g_inspec && g_target != i) {
+                //GoIdle(i, 0);
+                //AssignModel(i, g_model);
+                SwitchTeam(i, 2);
+                GoIdle(i, 0);
+            }
+
+            else if (!g_inspec && onteam <= 1) {
                 int jj;
                 int target;
 
                 for (int j = 1; j <= MaxClients; j++) {
-                    if (IsClientValid(j) && IsFakeClient(j) && GetClientTeam(j) == 2) {
+                    if (IsClientValid(j, 2, 0)) {
                         jj = GetRealClient(j);
 
                         if (jj == i) {
@@ -587,7 +600,7 @@ public Action ADTimer(Handle timer) {
                     }
                 }
 
-                if (IsClientValid(target) && IsFakeClient(target)) {
+                if (IsClientValid(target, 0, 0)) {
                     SwitchToBot(i, target);
                     GoIdle(i, 0);
                 }
@@ -918,7 +931,7 @@ void GoIdle(int client, int onteam=0) {
             SwitchToSpec(client);
         }
 
-        switch (IsClientValid(g_target) && IsFakeClient(g_target)) {
+        switch (IsClientValid(g_target, 0, 0)) {
             case 1: spec_target = g_target;
             case 0: spec_target = GetSafeSurvivor(client);
         }
@@ -968,12 +981,22 @@ bool IsAdmin(int client) {
     );
 }
 
-bool IsClientValid(int client) {
-    Echo(3, "IsClientValid: %d", client);
+bool IsClientValid(int client, int onteam=0, int mtype=2) {
+    Echo(3, "IsClientValid: %d, %d, %d", client, onteam, mtype);
 
     if (client >= 1 && client <= MaxClients) {
         if (IsClientConnected(client)) {
             if (IsClientInGame(client)) {
+
+                if (onteam != 0 && GetClientTeam(client) != onteam) {
+                    return false;
+                }
+
+                switch (mtype) {
+                    case 0: return IsFakeClient(client);
+                    case 1: return !IsFakeClient(client);
+                }
+
                 return true;
             }
         }
@@ -1045,7 +1068,7 @@ int ClientHomeTeam(int client) {
 bool SetQKey(int client) {
     Echo(2, "SetQKey: %d", client);
 
-    if (IsClientValid(client) && !IsFakeClient(client)) {
+    if (IsClientValid(client, 0, 1)) {
         if (GetClientAuthId(client, AuthId_Steam2, g_QKey, sizeof(g_QKey), true)) {
             return true;
         }
@@ -1703,13 +1726,13 @@ void QuickCheat(int client, char [] cmd, char [] arg) {
     SetCommandFlags(cmd, flags);
 }
 
-void SwitchToBot(int client, int bot, bool si_ghost=true) {
-    Echo(1, "SwitchToBot: %d %d %d", client, bot, si_ghost);
+void SwitchToBot(int client, int target, bool si_ghost=true) {
+    Echo(1, "SwitchToBot: %d %d %d", client, target, si_ghost);
 
-    if (client != bot && IsClientValid(bot)) {
-        switch (GetClientTeam(bot)) {
-            case 2: TakeoverBotSig(client, bot);
-            case 3: TakeoverZombieBotSig(client, bot, si_ghost);
+    if (IsClientValid(target, 0, 0)) {
+        switch (GetClientTeam(target)) {
+            case 2: TakeoverBotSig(client, target);
+            case 3: TakeoverZombieBotSig(client, target, si_ghost);
         }
     }
 }
@@ -1718,7 +1741,7 @@ void Takeover(int client, int onteam) {
     Echo(1, "Takeover: %d %d", client, onteam);
 
     if (GetQRecord(client)) {
-        if (IsClientValid(g_target) && IsFakeClient(g_target)) {
+        if (IsClientValid(g_target, 0, 0)) {
             if (client != g_target && GetClientTeam(g_target) == onteam) {
                 SwitchToBot(client, g_target);
                 return;
@@ -1817,7 +1840,7 @@ int CountTeamMates(int onteam, int mtype=2) {
         int humans;
 
         for (int i = 1; i <= MaxClients; i++) {
-            if (IsClientValid(i) && GetClientTeam(i) == onteam) {
+            if (IsClientValid(i, onteam)) {
                 switch (IsFakeClient(GetRealClient(i))) {
                     case 1: bots++;
                     case 0: humans++;
@@ -1909,7 +1932,7 @@ void SwitchTeam(int client, int onteam, char model[32]="") {
         }
 
         if (g_onteam == 2 && onteam <= 1) {
-            if (IsClientValid(g_target) && IsFakeClient(g_target)) {
+            if (IsClientValid(g_target, 0, 0)) {
                 SwitchToBot(client, g_target);
             }
         }
@@ -3266,3 +3289,4 @@ public Action QuickClientPrintCmd(int client, args) {
 
     QDBCheckCmd(client);
 }
+
