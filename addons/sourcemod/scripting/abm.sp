@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.62"
+#define PLUGIN_VERSION "0.1.63"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -2394,14 +2394,15 @@ void State_TransitionSig(int client, int mode) {
     }
 }
 
-bool TakeoverBotSig(int client, int bot) {
-    Echo(1, "TakeoverBotSig: %d %d", client, bot);
+bool TakeoverBotSig(int client, int target) {
+    Echo(1, "TakeoverBotSig: %d %d", client, target);
 
     if (!GetQRecord(client)) {
         return false;
     }
 
     static Handle hSwitch;
+
     if (hSwitch == null) {
         StartPrepSDKCall(SDKCall_Player);
         PrepSDKCall_SetFromConf(g_GameData, SDKConf_Signature, "TakeOverBot");
@@ -2410,20 +2411,25 @@ bool TakeoverBotSig(int client, int bot) {
     }
 
     if (hSwitch != null) {
-        if (IsClientInKickQueue(bot)) {
-            KickClient(bot);
+        if (IsClientInKickQueue(target)) {
+            KickClient(target);
         }
 
-        else if (IsClientValid(bot) && IsFakeClient(bot)) {
-            if (GetClientTeam(bot) == 2) {
-                SwitchToSpec(client);
-                SetHumanSpecSig(bot, client);
-                SDKCall(hSwitch, client, true);
-
-                Unqueue(client);
-                g_QRecord.SetValue("status", true, true);
-                return true;
+        else if (IsClientValid(target, 2, 0)) {
+            if (GetRealClient(target) != client) {
+                GetQRecord(client);
+                GetBotCharacter(target, g_model);
+                g_QRecord.SetString("model", g_model, true);
+                PrintToServer("--4: %N is model '%s'", client, g_model);
             }
+
+            SwitchToSpec(client);
+            SetHumanSpecSig(target, client);
+            SDKCall(hSwitch, client, true);
+
+            Unqueue(client);
+            g_QRecord.SetValue("status", true, true);
+            return true;
         }
     }
 
@@ -2432,7 +2438,7 @@ bool TakeoverBotSig(int client, int bot) {
         SetFailState("[ABM] TakeoverBotSig Signature broken.");
     }
 
-    g_QRecord.SetValue("lastid", bot, true);
+    g_QRecord.SetValue("lastid", target, true);
     if (GetClientTeam(client) == 1) {
         g_QRecord.SetValue("queued", true, true);
         QueueUp(client, 2);
@@ -2441,14 +2447,15 @@ bool TakeoverBotSig(int client, int bot) {
     return false;
 }
 
-bool TakeoverZombieBotSig(int client, int bot, bool si_ghost) {
-    Echo(1, "TakeoverZombieBotSig: %d %d", client, bot);
+bool TakeoverZombieBotSig(int client, int target, bool si_ghost) {
+    Echo(1, "TakeoverZombieBotSig: %d %d %d", client, target, si_ghost);
 
     if (!GetQRecord(client)) {
         return false;
     }
 
     static Handle hSwitch;
+
     if (hSwitch == null) {
         StartPrepSDKCall(SDKCall_Player);
         PrepSDKCall_SetFromConf(g_GameData, SDKConf_Signature, "TakeOverZombieBot");
@@ -2457,27 +2464,30 @@ bool TakeoverZombieBotSig(int client, int bot, bool si_ghost) {
     }
 
     if (hSwitch != null) {
-        if (IsClientInKickQueue(bot)) {
-            KickClient(bot);
+        if (IsClientInKickQueue(target)) {
+            KickClient(target);
         }
 
-        else if (IsClientValid(bot) && IsFakeClient(bot) && IsPlayerAlive(bot)) {
-            if (GetClientTeam(bot) == 3) {
-                SwitchToSpec(client);
-                SDKCall(hSwitch, client, bot);
+        else if (IsClientValid(target, 3, 0) && IsPlayerAlive(target)) {
+            GetQRecord(client);
+            GetBotCharacter(target, g_model);
+            g_QRecord.SetString("model", g_model, true);
+            PrintToServer("--5: %N is model '%s'", client, g_model);
 
-                if (si_ghost) {
-                    State_TransitionSig(client, 8);
-                    if (GetEntProp(client, Prop_Send, "m_zombieClass") == 8) {
-                        CreateTimer(1.0, ForceSpawnTimer, client, TIMER_REPEAT);
-                    }
+            SwitchToSpec(client);
+            SDKCall(hSwitch, client, target);
+
+            if (si_ghost) {
+                State_TransitionSig(client, 8);
+                if (GetEntProp(client, Prop_Send, "m_zombieClass") == 8) {
+                    CreateTimer(1.0, ForceSpawnTimer, client, TIMER_REPEAT);
                 }
-
-                Unqueue(client);
-                g_QRecord.SetValue("status", true, true);
-                g_AssistedSpawning = true;
-                return true;
             }
+
+            Unqueue(client);
+            g_QRecord.SetValue("status", true, true);
+            g_AssistedSpawning = true;
+            return true;
         }
     }
 
@@ -2486,7 +2496,7 @@ bool TakeoverZombieBotSig(int client, int bot, bool si_ghost) {
         SetFailState("[ABM] TakeoverZombieBotSig Signature broken.");
     }
 
-    g_QRecord.SetValue("lastid", bot, true);
+    g_QRecord.SetValue("lastid", target, true);
     if (GetClientTeam(client) == 1) {
         g_QRecord.SetValue("queued", true, true);
         QueueUp(client, 3);
@@ -3322,14 +3332,6 @@ void QDBCheckCmd(client) {
             PrintToConsole(client, " - OnTeam: %d", g_onteam);
             PrintToConsole(client, " - Queued: %d", g_queued);
             PrintToConsole(client, " - InSpec: %d", g_inspec);
-
-//             if (GetClientTeam(i) == 2) {
-//                 int j = GetClientModelIndex(i);
-//                 if (j != -1) {
-//                     PrintToConsole(client, " - Initialized Model: %s", g_SurvivorNames[j]);
-//                 }
-//             }
-
             PrintToConsole(client, " - Model: %s", g_model);
             PrintToConsole(client, " -\n");
         }
