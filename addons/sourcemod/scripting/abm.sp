@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.63"
+#define PLUGIN_VERSION "0.1.64"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -62,6 +62,7 @@ new Function:callBack;
 char g_QKey[64];      // holds players by STEAM_ID
 StringMap g_QDB;      // holds player records linked by STEAM_ID
 StringMap g_QRecord;  // changes to an individual STEAM_ID mapping
+StringMap g_QRtmp;    // temporary QRecord holder for checking records without changing the main
 StringMap g_Cvars;    // locked cvars end up here
 
 char g_InfectedNames[6][] = {"Boomer", "Smoker", "Hunter", "Spitter", "Jockey", "Charger"};
@@ -209,6 +210,7 @@ public OnPluginStart() {
     g_OS = GetOS();  // 0: Linux 1: Windows
     g_QDB = new StringMap();
     g_QRecord = new StringMap();
+    g_QRtmp = new StringMap();
     g_Cvars = new StringMap();
     g_sQueue = new ArrayList(2);
     g_iQueue = new ArrayList(2);
@@ -420,7 +422,7 @@ int GetRealClient(int client) {
 
             else {
                 for (int i = 1; i <= MaxClients; i++) {
-                    if (GetQRecord(i) && g_target == client) {
+                    if (GetQRtmp(i) && g_QRtmp.GetValue("target", target) && target == client) {
                         client = i;
                         break;
                     }
@@ -1133,6 +1135,21 @@ bool SetQKey(int client) {
     }
 
     return false;
+}
+
+bool GetQRtmp(int client) {
+    Echo(2, "GetQRtmp: %d", client);
+
+    bool result;
+    static char QKey[64];
+    QKey = g_QKey;
+
+    if (SetQKey(client) && g_QDB.GetValue(g_QKey, g_QRtmp)) {
+        result = true;
+    }
+
+    g_QKey = QKey;
+    return result;
 }
 
 bool GetQRecord(int client) {
