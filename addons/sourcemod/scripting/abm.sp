@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.68"
+#define PLUGIN_VERSION "0.1.69"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -309,6 +309,11 @@ public OnPluginStart() {
     StartAD();
 }
 
+public OnMapStart() {
+    Echo(2, "OnMapStart:");
+    PrecacheModels();
+}
+
 public OnEntityCreated(int ent, const char[] clsName) {
     Echo(2, "OnEntityCreated: %d %s", ent, clsName);
 
@@ -317,7 +322,7 @@ public OnEntityCreated(int ent, const char[] clsName) {
         bool iClip = !StrEqual(clsName, "func_playerinfected_clip", false);
 
         if (!(gClip && iClip)) {
-            CreateTimer(1.0, KillEntTimer, EntIndexToEntRef(ent));
+            CreateTimer(2.0, KillEntTimer, EntIndexToEntRef(ent));
         }
     }
 }
@@ -886,8 +891,6 @@ void AutoSetTankHp() {
 
 public OnConfigsExecuted() {
     Echo(2, "OnConfigsExecuted");
-
-    PrecacheModels();
 
     if (!g_DvarsCheck) {
         g_DvarsCheck = true;
@@ -2223,13 +2226,13 @@ public Action AutoModelTimer(Handle timer, int client) {
 
             index = -1;
 
-            if (IsClientValid(i, 0, 1)) {
+            if (IsClientValid(i, 0, 1) && client != i) {
                 if (GetQRecord(i) && g_onteam == 2 && g_model[0] != EOS) {
                     index = GetModelIndexByName(g_model, 2);
                 }
             }
 
-            else if (IsClientValid(i, 2, 0)) {
+            else if (IsClientValid(i, 2, 0) && client != i) {
                 if (GetRealClient(i) == i && IsPlayerAlive(i)) {
                     index = GetClientModelIndex(i);
                 }
@@ -2248,21 +2251,12 @@ public Action AutoModelTimer(Handle timer, int client) {
                     i = 4;  // we want to fall through
                     break;
                 }
+
+                if (set != 0 && index + 1 == sizeof(models)) {
+                    index=0; set=0;
+                }
             }
-
-            set = 0;
         }
-
-        // might be unnecessary
-        if (GetQRecord(realClient)) {
-            g_QRecord.SetString("model", g_SurvivorNames[index], true);
-            Echo(1, "--3: %N is model '%s'", realClient, g_SurvivorNames[index]);
-        }
-
-//         PrintToServer("\n");
-//         for (int i = 0; i < sizeof(models); i++) {
-//             PrintToServer("2: %s: %d", g_SurvivorNames[i], models[i]);
-//         }
     }
 
     return Plugin_Handled;
@@ -2272,11 +2266,7 @@ void PrecacheModels() {
     Echo(2, "PrecacheModels");
 
     for (int i = 0; i < sizeof(g_SurvivorPaths); i++) {
-        Format(g_sB, sizeof(g_sB), "%s", g_SurvivorPaths[i]);
-        if (!IsModelPrecached(g_sB)) {
-            int retcode = PrecacheModel(g_sB);
-            Echo(2, " - Precaching Survivor %s, retcode: %d", g_sB, retcode);
-        }
+        PrecacheModel(g_SurvivorPaths[i]);
     }
 }
 
