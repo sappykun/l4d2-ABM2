@@ -1632,22 +1632,37 @@ void RespawnClient(int client, int target=0) {
         }
     }
 
-    float origin[3];
     client = GetPlayClient(client);
     target = GetPlayClient(target);
+    bool weaponizePlayer = true;
+    static const float pos0[3];
+    static float pos1[3];
+    pos1 = pos0;
 
-    if (!IsClientValid(target)) {
-        target = client;
+    if (client != GetRealClient(target) && IsClientValid(target)) {
+        GetClientAbsOrigin(target, pos1);
     }
 
-    RoundRespawnSig(client);
-    GetClientAbsOrigin(target, origin);
-    QuickCheat(client, "give", g_PrimaryWeapon);
-    QuickCheat(client, "give", g_SecondaryWeapon);
-    QuickCheat(client, "give", g_Throwable);
-    QuickCheat(client, "give", g_HealItem);
-    QuickCheat(client, "give", g_Consumable);
-    TeleportEntity(client, origin, NULL_VECTOR, NULL_VECTOR);
+    else if (GetQRtmp(client)) {
+        pos1 = g_origin;
+        if (pos1[0] != pos0[0] && pos1[1] != pos0[1] && pos1[2] != pos0[2]) {
+            weaponizePlayer = false;
+        }
+    }
+
+    if (pos1[0] != pos0[0] && pos1[1] != pos0[1] && pos1[2] != pos0[2]) {
+        RoundRespawnSig(client);
+
+        if (weaponizePlayer) {
+            QuickCheat(client, "give", g_PrimaryWeapon);
+            QuickCheat(client, "give", g_SecondaryWeapon);
+            QuickCheat(client, "give", g_Throwable);
+            QuickCheat(client, "give", g_HealItem);
+            QuickCheat(client, "give", g_Consumable);
+        }
+
+        TeleportEntity(client, pos1, NULL_VECTOR, NULL_VECTOR);
+    }
 }
 
 void TeleportClient(int client, int target) {
