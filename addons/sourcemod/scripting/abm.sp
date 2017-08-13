@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.69"
+#define PLUGIN_VERSION "0.1.70"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -91,6 +91,7 @@ bool g_status, g_tmpStatus;         // g_QDB client life state
 bool g_update, g_tmpUpdate;         // g_QDB should we update this record?
 char g_model[64], g_tmpModel[64];   // g_QDB client's model
 float g_origin[3], g_tmpOrigin[3];  // g_QDB client's origin vector
+int g_models[8];
 Handle g_AD;                        // Assistant Director Timer
 
 bool g_IsVs;
@@ -603,7 +604,7 @@ public Action ADTimer(Handle timer) {
         if (g_AutoModel) {
             for (int i = 1; i <= MaxClients; i++) {
                 if (IsClientValid(i, 2, 0)) {
-                    CreateTimer(0.2, AutoModelTimer, i);
+                    AutoModel(i, 0.2);
                 }
             }
         }
@@ -1189,7 +1190,7 @@ bool GetQRecord(int client) {
             g_QRecord.GetValue("update", g_update);
             g_QRecord.GetString("model", g_model, sizeof(g_model));
 
-            if (g_model[0] == EOS) {
+            if (g_model[0] == EOS && GetClientTeam(client) >= 2) {
                 GetBotCharacter(client, g_model);
                 g_QRecord.SetString("model", g_model, true);
                 Echo(1, "--1: %N is model '%s'", client, g_model);
@@ -1351,7 +1352,7 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
     }
 
     if (onteam == 2) {
-        CreateTimer(0.2, AutoModelTimer, target);
+        AutoModel(target, 0.2);
         CreateTimer(0.4, OnSpawnHookTimer, target);
     }
 }
@@ -1508,7 +1509,7 @@ public QTeamHook(Handle event, const char[] name, bool dontBroadcast) {
 
             // attempt to apply a model asap
             if (g_ADFreeze && onteam == 2 && g_model[0] != EOS) {
-                PrintToServer("Still Frozen, Assigning %s Model to %N", g_model, client);
+                Echo(1, "--9: Client %N Assigned Model %s ASAP", client, g_model);
                 AssignModel(client, g_model);
             }
         }
@@ -2199,8 +2200,13 @@ void RmBots(int asmany, int onteam) {
 // MODEL FEATURES
 // ================================================================== //
 
+void AutoModel(int client, float time=0.2) {
+    Echo(1, "AutoModel: %d", client);
+    CreateTimer(time, AutoModelTimer, client);
+}
+
 public Action AutoModelTimer(Handle timer, int client) {
-    Echo(5, "AutoModelTimer: %d", client);
+    Echo(5, "AutoModelTimer: %d", client);  // 5
 
     if (g_AutoModel && IsClientValid(client, 2)) {
         static int realClient;
@@ -2216,50 +2222,57 @@ public Action AutoModelTimer(Handle timer, int client) {
             case 0: set = 4;  // l4d1 survivor set
         }
 
-        int models[8];
-        static int index;
-
-        for (int i = 1; i <= MaxClients; i++) {
-            if (client == i) {
-                continue;
-            }
-
-            index = -1;
-
-            if (IsClientValid(i, 0, 1) && client != i) {
-                if (GetQRecord(i) && g_onteam == 2 && g_model[0] != EOS) {
-                    index = GetModelIndexByName(g_model, 2);
-                }
-            }
-
-            else if (IsClientValid(i, 2, 0) && client != i) {
-                if (GetRealClient(i) == i && IsPlayerAlive(i)) {
-                    index = GetClientModelIndex(i);
-                }
-            }
-
-            if (index >= 0) {
-                models[index]++;
-            }
-        }
+        GetAllSurvivorModels(client);
 
         for (int i = 0; i < 4; i++) {
-            for (index = set; index < sizeof(models); index++) {
-                if (models[index] <= i) {
-                    models[index]++;
+            for (int index = set; index < sizeof(g_models); index++) {
+                if (g_models[index] <= i) {
+                    g_models[index]++;
                     AssignModel(client, g_SurvivorNames[index]);
                     i = 4;  // we want to fall through
                     break;
                 }
 
-                if (set != 0 && index + 1 == sizeof(models)) {
-                    index=0; set=0;
+                if (set != 0 && index + 1 == sizeof(g_models)) {
+                    index=-1; set=0;
                 }
             }
         }
     }
 
     return Plugin_Handled;
+}
+
+void GetAllSurvivorModels(client=-1) {
+    Echo(2, "GetAllSurvivorModels");
+
+    static int index;
+    static const int models[8];
+    g_models = models;
+
+    for (int i = 1; i <= MaxClients; i++) {
+        if (client == i) {
+            continue;
+        }
+
+        index = -1;
+
+        if (IsClientValid(i, 0, 1) && client != i) {
+            if (GetQRecord(i) && g_onteam == 2 && g_model[0] != EOS) {
+                index = GetModelIndexByName(g_model, 2);
+            }
+        }
+
+        else if (IsClientValid(i, 2, 0) && client != i) {
+            if (GetRealClient(i) == i && IsPlayerAlive(i)) {
+                index = GetClientModelIndex(i);
+            }
+        }
+
+        if (index >= 0) {
+            g_models[index]++;
+        }
+    }
 }
 
 void PrecacheModels() {
