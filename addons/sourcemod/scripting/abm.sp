@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.70"
+#define PLUGIN_VERSION "0.1.71"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -126,6 +126,7 @@ ConVar g_cvStripKick;
 ConVar g_cvAutoModel;
 ConVar g_cvKeepDead;
 ConVar g_cvMaxSwitches;
+ConVar g_cvIdentityFix;
 
 int g_LogLevel;
 int g_MinPlayers;
@@ -147,6 +148,7 @@ int g_OfferTakeover;
 int g_StripKick;
 bool g_AutoModel;
 int g_KeepDead;
+int g_IdentityFix;
 
 static char g_DvarsOriginStr[2048];  // will get lost to an sm plugins reload abm
 static bool g_DvarsCheck;
@@ -251,6 +253,7 @@ public OnPluginStart() {
     g_cvStripKick = CreateConVar("abm_stripkick", "0", "0: Don't strip removed bots 1: Strip removed bots");
     g_cvAutoModel = CreateConVar("abm_automodel", "1", "1: Full set of survivors 0: Map set of survivors");
     g_cvKeepDead = CreateConVar("abm_keepdead", "0", "0: The dead return alive 1: the dead return dead");
+    g_cvIdentityFix = CreateConVar("abm_identityfix", "1", "0: Do not assign identities 1: Assign identities");
 
     g_cvMaxSI = FindConVar("z_max_player_zombies");
     SetConVarBounds(g_cvMaxSI, ConVarBound_Lower, true, 1.0);
@@ -285,6 +288,7 @@ public OnPluginStart() {
     HookConVarChange(g_cvStripKick, UpdateConVarsHook);
     HookConVarChange(g_cvAutoModel, UpdateConVarsHook);
     HookConVarChange(g_cvKeepDead, UpdateConVarsHook);
+    HookConVarChange(g_cvIdentityFix, UpdateConVarsHook);
 
     UpdateConVarsHook(g_cvLogLevel, "0", "0");
     UpdateConVarsHook(g_cvMinPlayers, "4", "4");
@@ -305,6 +309,7 @@ public OnPluginStart() {
     UpdateConVarsHook(g_cvStripKick, "0", "0");
     UpdateConVarsHook(g_cvAutoModel, "1", "1");
     UpdateConVarsHook(g_cvKeepDead, "0", "0");
+    UpdateConVarsHook(g_cvIdentityFix, "1", "1");
 
     AutoExecConfig(true, "abm");
     StartAD();
@@ -503,7 +508,7 @@ public Action LifeCheckTimer(Handle timer, int target) {
         int status = IsPlayerAlive(target);
 
         switch (g_model[0] != EOS) {
-            case 1: AssignModel(target, g_model);
+            case 1: AssignModel(target, g_model, g_IdentityFix);
             case 0: {
                 GetBotCharacter(target, g_model);
                 g_QRecord.SetString("model", g_model, true);
@@ -512,7 +517,7 @@ public Action LifeCheckTimer(Handle timer, int target) {
         }
 
         g_QRecord.SetValue("status", status, true);
-        AssignModel(g_client, g_model);
+        AssignModel(g_client, g_model, g_IdentityFix);
     }
 }
 
@@ -840,6 +845,10 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
     else if (StrEqual(name, "abm_keepdead")) {
         g_KeepDead = GetConVarInt(g_cvKeepDead);
     }
+
+    else if (StrEqual(name, "abm_identityfix")) {
+        g_IdentityFix = GetConVarInt(g_cvIdentityFix);
+    }
 }
 
 void RegulateSI() {
@@ -988,7 +997,7 @@ void GoIdle(int client, int onteam=0) {
                 Unqueue(client);
             }
 
-            AssignModel(g_target, g_model);
+            AssignModel(g_target, g_model, g_IdentityFix);
         }
 
         else {
@@ -1510,7 +1519,7 @@ public QTeamHook(Handle event, const char[] name, bool dontBroadcast) {
             // attempt to apply a model asap
             if (g_ADFreeze && onteam == 2 && g_model[0] != EOS) {
                 Echo(1, "--9: Client %N Assigned Model %s ASAP", client, g_model);
-                AssignModel(client, g_model);
+                AssignModel(client, g_model, g_IdentityFix);
             }
         }
 
@@ -1545,7 +1554,7 @@ public QAfkHook(Handle event, const char[] name, bool dontBroadcast) {
 
         if (onteam == 2) {
             g_QRecord.SetValue("target", target, true);
-            AssignModel(target, g_model);
+            AssignModel(target, g_model, g_IdentityFix);
         }
     }
 
@@ -1572,7 +1581,7 @@ public QBakHook(Handle event, const char[] name, bool dontBroadcast) {
         }
 
         if (GetClientTeam(client) == 2) {
-            AssignModel(client, g_model);
+            AssignModel(client, g_model, g_IdentityFix);
         }
     }
 }
@@ -1802,7 +1811,7 @@ void SwitchToSpec(int client, int onteam=1) {
 
         if (GetRealClient(g_target) == client) {
             if (g_onteam == 2) {
-                AssignModel(g_target, g_model);
+                AssignModel(g_target, g_model, g_IdentityFix);
             }
 
             if (HasEntProp(g_target, Prop_Send, "m_humanSpectatorUserID")) {
@@ -2201,7 +2210,7 @@ void RmBots(int asmany, int onteam) {
 // ================================================================== //
 
 void AutoModel(int client, float time=0.2) {
-    Echo(1, "AutoModel: %d", client);
+    Echo(2, "AutoModel: %d %d", client, time);
     CreateTimer(time, AutoModelTimer, client);
 }
 
@@ -2228,7 +2237,7 @@ public Action AutoModelTimer(Handle timer, int client) {
             for (int index = set; index < sizeof(g_models); index++) {
                 if (g_models[index] <= i) {
                     g_models[index]++;
-                    AssignModel(client, g_SurvivorNames[index]);
+                    AssignModel(client, g_SurvivorNames[index], g_IdentityFix);
                     i = 4;  // we want to fall through
                     break;
                 }
@@ -2283,10 +2292,12 @@ void PrecacheModels() {
     }
 }
 
-void AssignModel(int client, char [] model) {
-    Echo(2, "AssignModel: %d %s", client, model);
+void AssignModel(int client, char [] model, int identityFix) {
+    Echo(2, "AssignModel: %d %s %d", client, model, identityFix);
 
-    if (GetClientTeam(client) != 2 || IsClientsModel(client, model)) {
+    if (!identityFix
+        || GetClientTeam(client) != 2
+        || IsClientsModel(client, model)) {
         return;
     }
 
@@ -2724,7 +2735,7 @@ public AssignModelHandler(int client, int level) {
                     menuArg0 = GetPlayClient(menuArg0);
                 }
 
-                AssignModel(menuArg0, g_SurvivorNames[menuArg1]);
+                AssignModel(menuArg0, g_SurvivorNames[menuArg1], 1);
             }
 
             GenericMenuCleaner(client);
