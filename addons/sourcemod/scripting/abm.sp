@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.71"
+#define PLUGIN_VERSION "0.1.72"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -646,12 +646,12 @@ public Action ADTimer(Handle timer) {
                 continue;
             }
 
-            if (g_ADInterval == 1 && g_tmpInspec && g_tmpTarget != i) {
+            if (g_ADInterval == 1 && onteam == 2) {
                 SwitchTeam(i, 2);
-                GoIdle(i, 0);
+                //GoIdle(i, 0);  // can cause looping at start
             }
 
-            else if (!g_tmpInspec && onteam <= 1) {
+            else if (!g_tmpInspec && GetClientTeam(i) <= 1) {
                 int jj;
                 int target;
 
