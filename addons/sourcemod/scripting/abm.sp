@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.72"
+#define PLUGIN_VERSION "0.1.73"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -331,6 +331,10 @@ public OnEntityCreated(int ent, const char[] clsName) {
             CreateTimer(2.0, KillEntTimer, EntIndexToEntRef(ent));
         }
     }
+
+    if (StrEqual(clsName, "survivor_bot")) {
+        SDKHook(ent, SDKHook_SpawnPost, AutoModel);
+    }
 }
 
 public Action KillEntTimer(Handle timer, any ref) {
@@ -609,7 +613,7 @@ public Action ADTimer(Handle timer) {
         if (g_AutoModel) {
             for (int i = 1; i <= MaxClients; i++) {
                 if (IsClientValid(i, 2, 0)) {
-                    AutoModel(i, 0.2);
+                    AutoModel(i);
                 }
             }
         }
@@ -1361,7 +1365,7 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
     }
 
     if (onteam == 2) {
-        AutoModel(target, 0.2);
+        // AutoModeling now takes place in OnEntityCreated
         CreateTimer(0.4, OnSpawnHookTimer, target);
     }
 }
@@ -1645,12 +1649,12 @@ void RespawnClient(int client, int target=0) {
 
     else if (GetQRtmp(client)) {
         pos1 = g_origin;
-        if (pos1[0] != pos0[0] && pos1[1] != pos0[1] && pos1[2] != pos0[2]) {
+        if (pos1[0] != 0 && pos1[1] != 0 && pos1[2] != 0) {
             weaponizePlayer = false;
         }
     }
 
-    if (pos1[0] != pos0[0] && pos1[1] != pos0[1] && pos1[2] != pos0[2]) {
+    if (pos1[0] != 0 && pos1[1] != 0 && pos1[2] != 0) {
         RoundRespawnSig(client);
 
         if (weaponizePlayer) {
@@ -2224,19 +2228,20 @@ void RmBots(int asmany, int onteam) {
 // MODEL FEATURES
 // ================================================================== //
 
-void AutoModel(int client, float time=0.2) {
-    Echo(2, "AutoModel: %d %d", client, time);
-    CreateTimer(time, AutoModelTimer, client);
+
+void AutoModel(int client) {
+    Echo(5, "AutoModel: %d", client);
+    RequestFrame(_AutoModel, client);
 }
 
-public Action AutoModelTimer(Handle timer, int client) {
-    Echo(5, "AutoModelTimer: %d", client);  // 5
+public _AutoModel(int client) {
+    Echo(5, "_AutoModel: %d", client);
 
     if (g_AutoModel && IsClientValid(client, 2)) {
         static int realClient;
         realClient = GetRealClient(client);
         if (GetQRecord(realClient) && g_model[0] != EOS) {
-            return Plugin_Handled;
+            return;
         }
 
         static set;
@@ -2263,8 +2268,6 @@ public Action AutoModelTimer(Handle timer, int client) {
             }
         }
     }
-
-    return Plugin_Handled;
 }
 
 void GetAllSurvivorModels(client=-1) {
@@ -2310,13 +2313,11 @@ void PrecacheModels() {
 void AssignModel(int client, char [] model, int identityFix) {
     Echo(2, "AssignModel: %d %s %d", client, model, identityFix);
 
-    if (!identityFix
-        || GetClientTeam(client) != 2
-        || IsClientsModel(client, model)) {
-        return;
-    }
+    if (identityFix == 1 && IsClientValid(client, 2)) {
+        if (IsClientsModel(client, model)) {
+            return;
+        }
 
-    if (IsClientValid(client)) {
         int i = GetModelIndexByName(model);
         int realClient = GetRealClient(client);
 

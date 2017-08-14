@@ -1,4 +1,175 @@
 # ABM Change Log
+
+## [0.1.73] - 2017-14-08
+### Changed
+- OnEntityCreated will now automatically model a survivor on next frame
+- AutoModelTimer is no longer a timer and is now called \_AutoModel
+
+### Fixed
+- AssignModel again checks if client passed in is valid
+
+## [0.1.72] - 2017-13-08
+### Changed
+- Checking for and forcing players onto a team after a changelevel
+
+### Fixed
+- Respawning real survivors onto themselves
+
+## [0.1.71] - 2017-13-08
+### Added
+- abm_identityfix cvar 1 tries to correct player identities, 0 is off
+
+## [0.1.70] - 2017-13-08
+### Added
+- GetAllSurvivorModels function split from AutoModelTimer
+- AutoModel tries to simply creating the timer to AutoModelTimer
+- g_models is an array that now holds all current survivor models
+
+### Fixed
+- Skipping Nick when checking for models to auto assign
+
+## [0.1.69] - 2017-12-08
+### Added
+- OnMapStart added and here models are now precached
+
+### Changed
+- Slowed down KillEntTimer from 1.0 to 2.0
+- Tweaked AutoModelTimer
+- PrecacheModels doesn't check if a model is precached, we just precache it
+
+
+## [0.1.68] - 2017-11-08
+### Changed
+- Replaced several GetQRecord calls with GetQRtmp
+
+### Added
+- GetQRtmp now sets all expected keys prefixed with g_tmp e.g., g_tmpOnteam
+
+### Fixed
+- Regression with ABMClients not getting properly kicked
+
+## [0.1.67] - 2017-11-08
+### Changed
+- Echo level 1 is now meant for active development
+
+## [0.1.66] - 2017-11-08
+### Added
+- Checks to both adding survivors and infected to prevent some warnings
+
+## [0.1.65] - 2017-11-08
+### Fixed
+- Changing sides on Versus should no longer be limited by vs_max_team_switches
+
+## [0.1.64] - 2017-11-08
+### Added
+- QRtmp identical to QRecord meant for use where records may change rapidly
+- GetQRtmp function acts similiar to GetQRecord
+
+## [0.1.63] - 2017-11-08
+### Changed
+- Refactored TakeoverBotSig and TakeoverZombieBotSig functions
+
+## [0.1.62] - 2017-11-08
+### Added
+- GetBotCharacter function to grab a players/bot correct model
+- Try to apply a players model ASAP in QTeamHook
+- Figuring out a players model ASAP in GetQRecord
+
+### Fixed
+- Properly detect and assign requested SI to humans in non-competitive modes
+
+### Changed
+- Refactored AutoModelTimer and now detect proper survivor set for map
+
+### Removed
+- QRecord key "ghost" removed. Will try to rely only on the "model" key
+
+## [0.1.61] - 2017-11-08
+### Changed
+- IsClientValid now has optional arguments of team/any and human/bot/all
+
+### Added
+- Try to Automodel bots *after* humans are all loaded
+
+## [0.1.60] - 2017-24-07
+### Changed
+- Tweaked LifeCheckTimer
+- Tweaked OnAllSpawnHook
+- Small tweaks all around and most functions are now tagged
+
+## [0.1.59] - 2017-23-07
+### Changed
+- ADTimer reorganized
+
+## [0.1.58] - 2017-23-07
+### Fixed
+- Spectator -> idle -> specate bug (spectated bots had wrong name)
+
+## [0.1.57] - 2017-23-07
+### Changed
+- Refactored CountTeamMates function
+- Refactored GetClientManager function
+
+## [0.1.56] - 2017-21-07
+### Added
+- Finalized abm_keepdead support
+- OnAllSpawnHook function -> LifeCheckTimer
+- GetRealClient function to track an idler/spectators bot
+- LifeCheckTimer function to track a players bot life/death state
+- New QRecord key "update", when true will reset a players QRecord
+
+### Changed
+- OnClientPostAdminCheck rewritten to support abm_keepdead
+- RemoveQDBKey no longers removes QRecords, makes "update" true
+- Experimental changes to AddSurvivor function (trying to simplify it)
+
+### Fixed
+- Jockey parent bug (thanks to Lux for the fix)
+
+## [0.1.55] - 2017-21-07
+### Changed
+- Added optional update argument to SetQRecord prototype
+
+## [0.1.54] - 2017-21-07
+### Added
+- Preliminary abm_keepdead cvar (1 keeps raging survivors dead, 0 doesn't)
+- UpdateGameMode function to better detect gamemodes (competitive Vs non)
+
+### Fixed
+- mp_gamemode detection regression
+
+## [0.1.53] - 2017-20-07
+### Changed
+- Cleaned and tweaked SI spawning in non-competitive modes
+
+## [0.1.52] - 2017-20-07
+### Fixed
+- SI regression (creation and takeover)
+
+## [0.1.51] - 2017-19-07
+### Added
+- Fifth+ survivor should now auto-idle on join
+- AutoIdleTimer function helps with survivors auto-idling
+
+## [0.1.50] - 2017-19-07
+### Fixed
+- Corrected UpdateConVarsHook abm_zoey value to its correct value
+
+## [0.1.49] - 2017-19-07
+### Added
+- RegulateSI function to help configre Vscript Director Options Unlocker
+- RestoreDvars for restoring default Vscript Director Options Unlocker options
+
+## [0.1.48] - 2017-18-07
+### Added
+- abm_stripkick cvar option, 1 strips survivors, 0 drops their items
+- abm_automodel cvar option, 1 will automodel, 0 will use default behavior
+
+## [0.1.47] - 2017-18-07
+### Added
+- abm_unlocksi defaults to 0 (1 uses L4Downtown, 2 uses Vscript Unlocker)
+- if abm_unlocksi is set to 2, Vscript Unlocker will be auto configured
+
 ## [0.1.46] - 2017-18-07
 ### Changed
 - Cleaned up AddInfected function, trying to reduce CreateFakeClient

@@ -113,14 +113,20 @@ Administrators can put anyone onto any team and into any bot using either menus 
 ```
 "abm_autohard" = "1"
  - 0: Off 1: Non-Vs > 4 2: Non-Vs >= 1
+"abm_automodel" = "1"
+ - 1: Full set of survivors 0: Map set of survivors
 "abm_consumable" = "adrenaline"
  - 5+ survivor consumable item
 "abm_extraplayers" = "0"
  - Extra survivors to start the round with
 "abm_healitem" = ""
  - 5+ survivor healing item
+"abm_identityfix" = "1"
+ - 0: Do not assign identities 1: Assign identities
 "abm_joinmenu" = "1"
  - 0: Off 1: Admins only 2: Everyone
+"abm_keepdead" = "0"
+ - 0: The dead return alive 1: the dead return dead
 "abm_loglevel" = "0"
  - Development logging level 0: Off, 4: Max
 "abm_minplayers" = "4"
@@ -133,15 +139,17 @@ Administrators can put anyone onto any team and into any bot using either menus 
  - 5+ survivor secondary weapon
 "abm_spawninterval" = "36"
  - SI full team spawn in (5 x N)
+"abm_stripkick" = "0"
+ - 0: Don't strip removed bots 1: Strip removed bots
 "abm_tankchunkhp" = "2500"
  - Health chunk per survivor on 5+ missions
 "abm_teamlimit" = "16"
  - Humans on team limit
 "abm_throwable" = ""
  - 5+ survivor throwable item
-"abm_unlocksi" = "1"
- - 0: Off 1: On (Requires Left 4 Downtown 2)
-"abm_version" = "0.1.42"
+"abm_unlocksi" = "0"
+ - 0: Off 1: Use Left 4 Downtown 2 2: Use VScript Director Options Unlocker
+"abm_version" = "0.1.73"
  - ABM plugin version
 "abm_zoey" = "5"
  - 0:Nick 1:Rochelle 2:Coach 3:Ellis 4:Bill 5:Zoey 6:Francis 7:Louis
@@ -188,8 +196,21 @@ This many extra survivors are added spawned in at the start of every round. If t
 #### abm_zoey (Linux default 5, Windows default 1)
 Due to a bug on Windows, spawning in a Zoey can crash the server. This value is auto detected and set to 5 on Linux and 1 on Windows by default. You'll get the model Zoey in all cases but only on Windows will Zoey really be Rochelle or the model you decide on.
 
-#### abm_unlocksi (default 1)
-Although Left4Downtown2 is overall optional, in most cases it is required if you need to run ABM in competitive modes with teams greater than 4 Vs 4. The cvar when set to 1 will unlock SI and match the surviving team size. The cvar when set to 0 will turn this off. Tuning this cvar has no effect without Left4Downtown2.
+#### abm_unlocksi (default 0)
+With this value at 0, ABM will not be able to unlock SI in some situations (e.g., Versus). Changing this to 1 will unlock SI with the use of Left 4 Downtown 2 and with a value of 2 will use Vscript Director Options Unlocker. Any value greater than 0 here should have its respective plugin already on the server.
+
+#### abm_automodel (default 1)
+Try to automatically model survivors to as unique a set as possible. This includes L4D1 characters on an L4D2 map and vice versa. Give this a value of 0 to turn it off.
+
+#### abm_identityfix (default 1)
+Try to remember and restore a survivor (real client, not bot) character. In some situations a survivor may change identity and ABM will try to fix that. If you're purposefully changing characters outside of ABM or wish to disable this, a value of 0 will turn this off.
+
+#### abm_keepdead (default 0)
+New survivor bots are created for new players and some people that may die may leave and rejoin to take advantage of it. Turning this to 1 will try to prevent that in making sure that players that leave and return, return dead.
+
+#### abm_stripkick (default 0)
+This will not strip leaving survivors of their inventory and all of their items will drop to the floor where they leave the game. Turning this to 1 will strip leaving survivors of all of their inventory and nothing will drop.
+
 
 ## How-to
 
