@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.73"
+#define PLUGIN_VERSION "0.1.74"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -1164,6 +1164,11 @@ bool GetQRtmp(int client) {
     if (SetQKey(client)) {
         if (g_QDB.GetValue(g_QKey, g_QRtmp)) {
 
+            if (IsClientValid(client) && IsPlayerAlive(client)) {
+                GetClientAbsOrigin(client, g_tmpOrigin);
+                g_QRtmp.SetArray("origin", g_tmpOrigin, sizeof(g_tmpOrigin), true);
+            }
+
             g_QRtmp.GetValue("client", g_tmpClient);
             g_QRtmp.GetValue("target", g_tmpTarget);
             g_QRtmp.GetValue("lastid", g_tmpLastid);
@@ -1174,6 +1179,13 @@ bool GetQRtmp(int client) {
             g_QRtmp.GetValue("update", g_tmpUpdate);
             g_QRtmp.GetString("model", g_tmpModel, sizeof(g_tmpModel));
             g_QRtmp.GetArray("origin", g_tmpOrigin, sizeof(g_tmpOrigin));
+
+            if (g_tmpModel[0] == EOS) {
+                GetBotCharacter(client, g_tmpModel);
+                g_QRtmp.SetString("model", g_tmpModel, true);
+                Echo(1, "-t1: %N is model '%s'", client, g_tmpModel);
+            }
+
             result = true;
         }
     }
@@ -1203,10 +1215,10 @@ bool GetQRecord(int client) {
             g_QRecord.GetValue("update", g_update);
             g_QRecord.GetString("model", g_model, sizeof(g_model));
 
-            if (g_model[0] == EOS && GetClientTeam(client) >= 2) {
+            if (g_model[0] == EOS) {
                 GetBotCharacter(client, g_model);
                 g_QRecord.SetString("model", g_model, true);
-                Echo(1, "--1: %N is model '%s'", client, g_model);
+                Echo(1, "-n1: %N is model '%s'", client, g_model);
             }
 
             return true;
@@ -2072,6 +2084,8 @@ void SwitchTeam(int client, int onteam, char model[32]="") {
 
                     g_QRecord.SetValue("queued", true, true);
                     g_QRecord.SetValue("onteam", onteam, true);
+                    g_QRecord.SetString("model", "", true);
+                    Echo(1, "--8: %N is model '%s'", client, "");
 
                     if (onteam == 3) {
 

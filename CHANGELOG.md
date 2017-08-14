@@ -1,5 +1,10 @@
 # ABM Change Log
 
+## [0.1.74] - 2017-14-08
+### Fixed
+- Quicker model detection
+- QRtmp now mirrors QRecord perfectly
+
 ## [0.1.73] - 2017-14-08
 ### Changed
 - OnEntityCreated will now automatically model a survivor on next frame
