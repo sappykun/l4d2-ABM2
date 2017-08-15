@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.75"
+#define PLUGIN_VERSION "0.1.76"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -929,6 +929,11 @@ public OnConfigsExecuted() {
         strcopy(g_sB, sizeof(g_sB), g_sB[4]);
         ServerCommand("exec \"%s\"", g_sB);
         Echo(0, "Extending ABM: %s", g_sB);
+    }
+
+    // some servers don't pick up on this automatically
+    else if (FileExists("cfg/sourcemod/abm.cfg", true)) {
+        ServerCommand("exec \"sourcemod/abm.cfg\"");
     }
 }
 
@@ -2106,7 +2111,7 @@ void SwitchTeam(int client, int onteam, char model[32]="") {
                     if (onteam == 3) {
 
                         if (g_IsVs) {  // see if a proper way to get on team 2 exist
-                            static switches;  // A Lux idea
+                            static int switches;  // A Lux idea
                             switches = GetConVarInt(g_cvMaxSwitches);
                             SetConVarInt(g_cvMaxSwitches, 9999);
                             ChangeClientTeam(client, onteam);

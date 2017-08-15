@@ -1,5 +1,9 @@
 # ABM Change Log
 
+## [0.1.76] - 2017-15-08
+### Fixed
+- Executing abm.cfg on some Linux servers that seem to ignore it
+
 ## [0.1.75] - 2017-15-08
 ### Added
 - Extended configuration support e.g., cfg/sourcemod/abm/tankyard.cfg
