@@ -146,7 +146,7 @@ int g_JoinMenu;
 int g_TeamLimit;
 int g_OfferTakeover;
 int g_StripKick;
-bool g_AutoModel;
+int g_AutoModel;
 int g_KeepDead;
 int g_IdentityFix;
 
@@ -843,7 +843,7 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
     }
 
     else if (StrEqual(name, "abm_automodel")) {
-        g_AutoModel = GetConVarBool(g_cvAutoModel);
+        g_AutoModel = GetConVarInt(g_cvAutoModel);
     }
 
     else if (StrEqual(name, "abm_keepdead")) {
@@ -915,11 +915,11 @@ public OnConfigsExecuted() {
         }
     }
 
-    // TODO: look into also providing a simpler maintenance approach "abm_extend"?
-    // l4d2_tank_arena,l4d2_tank_challenge_15_rounds,l4d2_tank_challenge_20_rounds,\
-    // l4d2_tank_challenge_30_rounds,l4d2_tank_challenge,l4d2_tanksplayground_night,\
-    // l4d2_tanksplayground,tankyard:abm_unlocksi=0,abm_spawninterval=0,\
-    // abm_tankchunkhp=1000;
+    /* TODO: look into also providing a simpler maintenance approach "abm_extend"?
+    l4d2_tank_arena,l4d2_tank_challenge_15_rounds,l4d2_tank_challenge_20_rounds,\
+    l4d2_tank_challenge_30_rounds,l4d2_tank_challenge,l4d2_tanksplayground_night,\
+    l4d2_tanksplayground,tankyard:abm_unlocksi=0,abm_spawninterval=0,\
+    abm_tankchunkhp=1000; */
 
     // extend the base cfg with a map specific cfg
     GetCurrentMap(g_sB, sizeof(g_sB));

@@ -156,7 +156,7 @@ Administrators can put anyone onto any team and into any bot using either menus 
 ```
 
 ### Extending Configurations
-ABM provides a way to override cvars based on the map name. Create the folder cfg/sourcemod/abm and create a file named MAPNAME.cfg. When loading a map with an extended configuration, cvars provided here will override any found in abm.cfg. Some maps may require this e.g., Tanks Playground, Tanks Challenge, Tanks Arena. Taking Tanks Challenge as an example, create the file cfg/sourcemod/abm/l4d2_tank_challenge.cfg and to prevent any spawning of SI and make all Tanks health a bit more reasonable, do this
+ABM provides a way to override cvars based on the map name. Create the folder ```cfg/sourcemod/abm``` and create a file named ```MAPNAME.cfg```. When loading a map with an extended configuration, cvars provided here will override any found in abm.cfg. Some maps may require this e.g., Tanks Playground, Tanks Challenge, Tanks Arena. Taking Tanks Challenge as an example, create the file ```cfg/sourcemod/abm/l4d2_tank_challenge.cfg``` and to prevent any spawning of SI and make all Tanks health a bit more reasonable, do this
 ```
 abm_unlocksi 0
 abm_spawninterval 0

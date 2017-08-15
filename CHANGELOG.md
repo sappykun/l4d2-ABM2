@@ -31,8 +31,8 @@
 ## [0.1.70] - 2017-13-08
 ### Added
 - GetAllSurvivorModels function split from AutoModelTimer
-- AutoModel tries to simply creating the timer to AutoModelTimer
-- g_models is an array that now holds all current survivor models
+- AutoModel is now a proxy function to AutoModelTimer
+- g_models is an array that inventories all survivor models
 
 ### Fixed
 - Skipping Nick when checking for models to auto assign
@@ -45,7 +45,6 @@
 - Slowed down KillEntTimer from 1.0 to 2.0
 - Tweaked AutoModelTimer
 - PrecacheModels doesn't check if a model is precached, we just precache it
-
 
 ## [0.1.68] - 2017-11-08
 ### Changed
@@ -166,8 +165,8 @@
 
 ## [0.1.49] - 2017-19-07
 ### Added
-- RegulateSI function to help configre Vscript Director Options Unlocker
-- RestoreDvars for restoring default Vscript Director Options Unlocker options
+- RegulateSI function to help configure VScript Director Options Unlocker
+- RestoreDvars function for restoring default VScript Director Options Unlocker value
 
 ## [0.1.48] - 2017-18-07
 ### Added
@@ -176,14 +175,14 @@
 
 ## [0.1.47] - 2017-18-07
 ### Added
-- abm_unlocksi defaults to 0 (1 uses L4Downtown, 2 uses Vscript Unlocker)
-- if abm_unlocksi is set to 2, Vscript Unlocker will be auto configured
+- abm_unlocksi when set to 2 will configure and use VScript Director Options Unlocker
 
 ## [0.1.46] - 2017-18-07
 ### Changed
 - Cleaned up AddInfected function, trying to reduce CreateFakeClient
 - Cleaned up L4D_OnGetScriptValueInt (match VScript Director Options Unlocker)
 - Cleaned up UpdateConVarsHook
+- abm_unlocksi now defaults to 0 
 
 ## [0.1.45] - 2017-13-07
 ### Fixed
