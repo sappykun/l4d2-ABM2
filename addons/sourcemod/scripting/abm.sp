@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.74"
+#define PLUGIN_VERSION "0.1.75"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -913,6 +913,22 @@ public OnConfigsExecuted() {
             GetConVarString(g_cvDvarsHandle, g_DvarsOriginStr, sizeof(g_DvarsOriginStr));
             RegulateSI();
         }
+    }
+
+    // TODO: look into also providing a simpler maintenance approach "abm_extend"?
+    // l4d2_tank_arena,l4d2_tank_challenge_15_rounds,l4d2_tank_challenge_20_rounds,\
+    // l4d2_tank_challenge_30_rounds,l4d2_tank_challenge,l4d2_tanksplayground_night,\
+    // l4d2_tanksplayground,tankyard:abm_unlocksi=0,abm_spawninterval=0,\
+    // abm_tankchunkhp=1000;
+
+    // extend the base cfg with a map specific cfg
+    GetCurrentMap(g_sB, sizeof(g_sB));
+    Format(g_sB, sizeof(g_sB), "cfg/sourcemod/abm/%s.cfg", g_sB);
+
+    if (FileExists(g_sB, true)) {
+        strcopy(g_sB, sizeof(g_sB), g_sB[4]);
+        ServerCommand("exec \"%s\"", g_sB);
+        Echo(0, "Extending ABM: %s", g_sB);
     }
 }
 

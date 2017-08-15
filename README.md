@@ -155,8 +155,17 @@ Administrators can put anyone onto any team and into any bot using either menus 
  - 0:Nick 1:Rochelle 2:Coach 3:Ellis 4:Bill 5:Zoey 6:Francis 7:Louis
 ```
 
-### Locking and Unlocking Cvars
+### Extending Configurations
+ABM provides a way to override cvars based on the map name. Create the folder cfg/sourcemod/abm and create a file named MAPNAME.cfg. When loading a map with an extended configuration, cvars provided here will override any found in abm.cfg. Some maps may require this e.g., Tanks Playground, Tanks Challenge, Tanks Arena. Taking Tanks Challenge as an example, create the file cfg/sourcemod/abm/l4d2_tank_challenge.cfg and to prevent any spawning of SI and make all Tanks health a bit more reasonable, do this
+```
+abm_unlocksi 0
+abm_spawninterval 0
+abm_tankchunkhp 1000
+```
 
+Overridden cvars are reset back to normal when a map changes to one without an extended config.
+
+### Locking and Unlocking Cvars
 During a game, changing a plugin cvar that differs from the value in its cfg will normally get reset on map change. ABM provides a way to lock and unlock cvars that will last across map changes. When setting an ABM cvar, prefix it with -l (for lock) or -u (for unlock). __It is safe to separate the switch (-l or -u) with white space in a terminal but the universal approach is no white space between the switch and its value__.
 
 - abm_minplayers 1  // revert to cfg value on next map
@@ -197,7 +206,10 @@ This many extra survivors are added spawned in at the start of every round. If t
 Due to a bug on Windows, spawning in a Zoey can crash the server. This value is auto detected and set to 5 on Linux and 1 on Windows by default. You'll get the model Zoey in all cases but only on Windows will Zoey really be Rochelle or the model you decide on.
 
 #### abm_unlocksi (default 0)
-With this value at 0, ABM will not be able to unlock SI in some situations (e.g., Versus). Changing this to 1 will unlock SI with the use of Left 4 Downtown 2 and with a value of 2 will use Vscript Director Options Unlocker. Any value greater than 0 here should have its respective plugin already on the server.
+With this value at 0, ABM will not be able to unlock SI in some situations (e.g., Versus). Changing this to 1 will unlock SI with the use of Left 4 Downtown 2 and with a value of 2 will use VScript Director Options Unlocker. Any value greater than 0 here should have its respective plugin already on the server.
+
+- [VScript Director Options Unlocker](https://forums.alliedmods.net/showthread.php?t=299532)
+- [Left 4 Downtown 2](https://forums.alliedmods.net/showthread.php?t=134032)
 
 #### abm_automodel (default 1)
 Try to automatically model survivors to as unique a set as possible. This includes L4D1 characters on an L4D2 map and vice versa. Give this a value of 0 to turn it off.
@@ -369,6 +381,8 @@ This will not strip leaving survivors of their inventory and all of their items 
 	- A. Unlock cvars (only if they're locked) and changes are temporary
 - Q. How do I turn off takeover menus on a players death?
 	- A. ```abm_offertakeover 0```
+- Q. Can I change configuration based on the map we're playing?
+    - A. See "Extending Configurations"
 
 ## Thanks
 The most valuable assets of any good community are in the time of its people and knowledge summed. I've learned some valuable insights while writing ABM and it is what it is because of good people.

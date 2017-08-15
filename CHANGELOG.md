@@ -1,5 +1,9 @@
 # ABM Change Log
 
+## [0.1.75] - 2017-15-08
+### Added
+- Extended configuration support e.g., cfg/sourcemod/abm/tankyard.cfg
+
 ## [0.1.74] - 2017-14-08
 ### Fixed
 - Quicker model detection
