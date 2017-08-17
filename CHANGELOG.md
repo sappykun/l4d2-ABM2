@@ -1,5 +1,13 @@
 # ABM Change Log
 
+## [0.1.78] - 2017-16-08
+### Added
+- IsEntityValid function
+
+### Changed
+- IsValidEntity calls to use IsEntityValid
+- Tweaked up just a bit
+
 ## [0.1.77] - 2017-16-08
 ### Fixed
 - Slight optimization to OnEntityCreated (if else if)

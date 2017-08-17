@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.77"
+#define PLUGIN_VERSION "0.1.78"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -341,7 +341,7 @@ public Action KillEntTimer(Handle timer, any ref) {
     Echo(2, "KillEntTimer: %d", ref);
 
     int ent = EntRefToEntIndex(ref);
-    if (ent != INVALID_ENT_REFERENCE || IsValidEntity(ent)) {
+    if (ent != INVALID_ENT_REFERENCE || IsEntityValid(ent)) {
         AcceptEntityInput(ent, "kill");
     }
 
@@ -1083,6 +1083,11 @@ bool IsAdmin(int client) {
     );
 }
 
+bool IsEntityValid(int ent) {
+    Echo(1, "IsEntityValid: %d", ent);
+    return (ent > MaxClients && ent <= 2048 && IsValidEntity(ent));
+}
+
 bool IsClientValid(int client, int onteam=0, int mtype=2) {
     Echo(4, "IsClientValid: %d, %d, %d", client, onteam, mtype);
 
@@ -1651,9 +1656,9 @@ void StripClientSlot(int client, int slot) {
     if (IsClientValid(client)) {
         if (GetClientTeam(client) == 2) {
             int ent = GetPlayerWeaponSlot(client, slot);
-            if (IsValidEntity(ent)) {
+            if (IsEntityValid(ent)) {
                 RemovePlayerItem(client, ent);
-                RemoveEdict(ent);
+                AcceptEntityInput(ent,"kill");
             }
         }
     }
@@ -1806,7 +1811,7 @@ void GhostsModeProtector(int state) {
         return;
     }
 
-    static ghosts[MAXPLAYERS + 1];
+    static int ghosts[MAXPLAYERS + 1];
 
     switch (state) {
         case 0: {
@@ -3242,7 +3247,7 @@ void InvSlotsMenu(int client, int target, char [] title) {
         IntToString(i, g_sB, sizeof(g_sB));
         ent = GetPlayerWeaponSlot(target, i);
 
-        if (IsValidEntity(ent)) {
+        if (IsEntityValid(ent)) {
             GetEntityClassname(ent, weapon, sizeof(weapon));
             menu.AddItem(g_sB, weapon);
         }
