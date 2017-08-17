@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.78"
+#define PLUGIN_VERSION "0.1.79"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -311,8 +311,22 @@ public OnPluginStart() {
     UpdateConVarsHook(g_cvKeepDead, "0", "0");
     UpdateConVarsHook(g_cvIdentityFix, "1", "1");
 
+    AddCommandListener(CmdIntercept, "z_spawn");
+    AddCommandListener(CmdIntercept, "z_spawn_old");
+    AddCommandListener(CmdIntercept, "z_add");
     AutoExecConfig(true, "abm");
     StartAD();
+}
+
+public Action CmdIntercept(int client, const char[] cmd, int args) {
+    Echo(2, "CmdIntercept:");
+
+    if (g_AssistedSpawning) {
+        GhostsModeProtector(0);
+        RequestFrame(GhostsModeProtector, 1);
+    }
+
+    return Plugin_Continue;
 }
 
 public OnMapStart() {
@@ -1465,6 +1479,7 @@ public Action ForceSpawnTimer(Handle timer, any client) {
         i = times[client]--;
 
         if (GetEntProp(client, Prop_Send, "m_zombieClass") != 8) {
+            i = times[client] = 20;
             return Plugin_Stop;
         }
 
@@ -1781,7 +1796,7 @@ bool AddInfected(char model[32]="", int version=0) {
 
     if (IsClientValid(i)) {
         ChangeClientTeam(i, 3);
-        GhostsModeProtector(0);
+        //GhostsModeProtector(0);
         Format(g_sB, sizeof(g_sB), "%s auto area", model);
 
         switch (version) {
@@ -1790,7 +1805,7 @@ bool AddInfected(char model[32]="", int version=0) {
         }
 
         KickClient(i);
-        GhostsModeProtector(1);
+        //GhostsModeProtector(1);
         return true;
     }
 
