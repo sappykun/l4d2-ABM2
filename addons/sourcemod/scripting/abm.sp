@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.76"
+#define PLUGIN_VERSION "0.1.77"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -332,7 +332,7 @@ public OnEntityCreated(int ent, const char[] clsName) {
         }
     }
 
-    if (StrEqual(clsName, "survivor_bot")) {
+    else if (clsName[0] == 's' && StrEqual(clsName, "survivor_bot")) {
         SDKHook(ent, SDKHook_SpawnPost, AutoModel);
     }
 }
@@ -928,7 +928,7 @@ public OnConfigsExecuted() {
     if (FileExists(g_sB, true)) {
         strcopy(g_sB, sizeof(g_sB), g_sB[4]);
         ServerCommand("exec \"%s\"", g_sB);
-        Echo(0, "Extending ABM: %s", g_sB);
+        Echo(1, "Extending ABM: %s", g_sB);
     }
 
     // some servers don't pick up on this automatically
@@ -1027,6 +1027,10 @@ void GoIdle(int client, int onteam=0) {
 
         else {
             SwitchToSpec(client);
+        }
+
+        if (g_onteam == 3 && onteam <= 1) {
+            g_QRecord.SetString("model", "", true);
         }
 
         switch (IsClientValid(g_target, 0, 0)) {
@@ -1199,14 +1203,14 @@ bool GetQRtmp(int client) {
             g_QRtmp.GetValue("status", g_tmpStatus);
             g_QRtmp.GetValue("update", g_tmpUpdate);
             g_QRtmp.GetString("model", g_tmpModel, sizeof(g_tmpModel));
-            g_QRtmp.GetArray("origin", g_tmpOrigin, sizeof(g_tmpOrigin));
 
             if (g_tmpModel[0] == EOS) {
                 GetBotCharacter(client, g_tmpModel);
                 g_QRtmp.SetString("model", g_tmpModel, true);
-                Echo(1, "-t1: %N is model '%s'", client, g_tmpModel);
+
             }
 
+            Echo(1, "-t1: %N is model '%s'", client, g_tmpModel);
             result = true;
         }
     }
@@ -1239,9 +1243,9 @@ bool GetQRecord(int client) {
             if (g_model[0] == EOS) {
                 GetBotCharacter(client, g_model);
                 g_QRecord.SetString("model", g_model, true);
-                Echo(1, "-n1: %N is model '%s'", client, g_model);
             }
 
+            Echo(1, "-n1: %N is model '%s'", client, g_model);
             return true;
         }
     }
@@ -2105,11 +2109,8 @@ void SwitchTeam(int client, int onteam, char model[32]="") {
 
                     g_QRecord.SetValue("queued", true, true);
                     g_QRecord.SetValue("onteam", onteam, true);
-                    g_QRecord.SetString("model", "", true);
-                    Echo(1, "--8: %N is model '%s'", client, "");
 
                     if (onteam == 3) {
-
                         if (g_IsVs) {  // see if a proper way to get on team 2 exist
                             static int switches;  // A Lux idea
                             switches = GetConVarInt(g_cvMaxSwitches);

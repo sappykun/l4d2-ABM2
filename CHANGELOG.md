@@ -1,5 +1,11 @@
 # ABM Change Log
 
+## [0.1.77] - 2017-16-08
+### Fixed
+- Slight optimization to OnEntityCreated (if else if)
+- SI to spectator model is now correctly blanked out
+- Cleaned up a bit
+
 ## [0.1.76] - 2017-15-08
 ### Fixed
 - Executing abm.cfg on some Linux servers that seem to ignore it
