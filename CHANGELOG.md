@@ -1,5 +1,13 @@
 # ABM Change Log
 
+## [0.1.79] - 2017-16-08
+### Added
+- CmdIntercept function to watch for use of z_spawn commands
+
+### Fixed
+- Tank spawn timer not getting reset in some situations
+- Using z_spawn should no longer knock out ABMs SI in non-competitive modes
+
 ## [0.1.78] - 2017-16-08
 ### Added
 - IsEntityValid function
