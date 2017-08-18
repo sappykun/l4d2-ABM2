@@ -39,14 +39,12 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.79"
+#define PLUGIN_VERSION "0.1.80"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
 ArrayList g_sQueue;
 ArrayList g_iQueue;
-
-int g_OS;  // no one wants to do OS specific stuff but a bug on Windows crashes the server
 
 // menu parameters
 #define menuArgs g_menuItems[client]     // Global argument tracking for the menu system
@@ -78,7 +76,7 @@ char g_SurvivorPaths[8][] = {
     "models/survivors/survivor_manager.mdl",
 };
 
-char g_dB[512];                     // generic debug string buffer
+int g_OS;                           // 0: Linux, 1: Windows (Prevent crash on Windows /w Zoey)
 char g_sB[512];                     // generic catch all string buffer
 char g_pN[128];                     // a dedicated buffer to storing a players name
 int g_client, g_tmpClient;          // g_QDB client id
@@ -102,53 +100,33 @@ bool g_AddedPlayers = false;
 bool g_ADFreeze = true;
 int g_ADInterval;
 
-ConVar g_cvLogLevel;
-ConVar g_cvMinPlayers;
-ConVar g_cvPrimaryWeapon;
-ConVar g_cvSecondaryWeapon;
-ConVar g_cvThrowable;
-ConVar g_cvHealItem;
-ConVar g_cvConsumable;
-ConVar g_cvZoey;
-ConVar g_cvExtraPlayers;
-ConVar g_cvGameMode;
+ConVar g_cvVersion;                                         // abm_version
+ConVar g_cvLogLevel; int g_LogLevel;                        // abm_loglevel
+ConVar g_cvMinPlayers; int g_MinPlayers;                    // abm_minplayers
+ConVar g_cvPrimaryWeapon; char g_PrimaryWeapon[64];         // abm_primaryweapon
+ConVar g_cvSecondaryWeapon; char g_SecondaryWeapon[64];     // abm_secondaryweapon
+ConVar g_cvThrowable; char g_Throwable[64];                 // abm_throwable
+ConVar g_cvHealItem; char g_HealItem[64];                   // abm_healitem
+ConVar g_cvConsumable; char g_Consumable[64];               // abm_consumable
+ConVar g_cvExtraPlayers; int g_ExtraPlayers;                // abm_extraplayers
+ConVar g_cvTankChunkHp; int g_TankChunkHp;                  // abm_tankchunkhp
+ConVar g_cvSpawnInterval; int g_SpawnInterval;              // abm_spawninterval
+ConVar g_cvAutoHard; int g_AutoHard;                        // abm_autohard
+ConVar g_cvUnlockSI; int g_UnlockSI;                        // abm_unlocksi
+ConVar g_cvJoinMenu; int g_JoinMenu;                        // abm_joinmenu
+ConVar g_cvTeamLimit; int g_TeamLimit;                      // abm_teamlimit
+ConVar g_cvOfferTakeover; int g_OfferTakeover;              // abm_offertakeover
+ConVar g_cvStripKick; int g_StripKick;                      // abm_stripkick
+ConVar g_cvAutoModel; int g_AutoModel;                      // abm_automodel
+ConVar g_cvKeepDead; int g_KeepDead;                        // abm_keepdead
+ConVar g_cvIdentityFix; int g_IdentityFix;                  // abm_identityfix
+ConVar g_cvZoey; int g_Zoey;                                // abm_zoey
+ConVar g_cvMaxSI; int g_MaxSI;                              // z_max_player_zombies
+
 ConVar g_cvTankHealth;
 ConVar g_cvDvarsHandle;
-ConVar g_cvTankChunkHp;
-ConVar g_cvSpawnInterval;
-ConVar g_cvMaxSI;
-ConVar g_cvAutoHard;
-ConVar g_cvUnlockSI;
-ConVar g_cvJoinMenu;
-ConVar g_cvTeamLimit;
-ConVar g_cvOfferTakeover;
-ConVar g_cvStripKick;
-ConVar g_cvAutoModel;
-ConVar g_cvKeepDead;
 ConVar g_cvMaxSwitches;
-ConVar g_cvIdentityFix;
-
-int g_LogLevel;
-int g_MinPlayers;
-char g_PrimaryWeapon[64];
-char g_SecondaryWeapon[64];
-char g_Throwable[64];
-char g_HealItem[64];
-char g_Consumable[64];
-int g_Zoey;
-int g_ExtraPlayers;
-int g_TankChunkHp;
-int g_SpawnInterval;
-int g_MaxSI;
-int g_AutoHard;
-int g_UnlockSI;
-int g_JoinMenu;
-int g_TeamLimit;
-int g_OfferTakeover;
-int g_StripKick;
-int g_AutoModel;
-int g_KeepDead;
-int g_IdentityFix;
+ConVar g_cvGameMode;
 
 static char g_DvarsOriginStr[2048];  // will get lost to an sm plugins reload abm
 static bool g_DvarsCheck;
@@ -219,6 +197,50 @@ public OnPluginStart() {
     g_sQueue = new ArrayList(2);
     g_iQueue = new ArrayList(2);
 
+    char zoeyId[2];
+    switch(g_OS) {
+        case 0: zoeyId = "5";  // 5 is the real Zoey
+        case 1: zoeyId = "1";  // Zoey crashes Windows servers, 1 is Rochelle
+    }
+
+    SetupCvar(g_cvVersion, "abm_version", PLUGIN_VERSION, "ABM plugin version");
+    SetupCvar(g_cvLogLevel, "abm_loglevel", "0", "Development logging level 0: Off, 4: Max");
+    SetupCvar(g_cvMinPlayers, "abm_minplayers", "4", "Pruning extra survivors stops at this size");
+    SetupCvar(g_cvPrimaryWeapon, "abm_primaryweapon", "shotgun_chrome", "5+ survivor primary weapon");
+    SetupCvar(g_cvSecondaryWeapon,"abm_secondaryweapon", "baseball_bat", "5+ survivor secondary weapon");
+    SetupCvar(g_cvThrowable, "abm_throwable", "", "5+ survivor throwable item");
+    SetupCvar(g_cvHealItem, "abm_healitem", "", "5+ survivor healing item");
+    SetupCvar(g_cvConsumable, "abm_consumable", "adrenaline", "5+ survivor consumable item");
+    SetupCvar(g_cvExtraPlayers, "abm_extraplayers", "0", "Extra survivors to start the round with");
+    SetupCvar(g_cvTankChunkHp, "abm_tankchunkhp", "2500", "Health chunk per survivor on 5+ missions");
+    SetupCvar(g_cvSpawnInterval, "abm_spawninterval", "36", "SI full team spawn in (5 x N)");
+    SetupCvar(g_cvAutoHard, "abm_autohard", "1", "0: Off 1: Non-Vs > 4 2: Non-Vs >= 1");
+    SetupCvar(g_cvUnlockSI, "abm_unlocksi", "0", "0: Off 1: Use Left 4 Downtown 2 2: Use VScript Director Options Unlocker");
+    SetupCvar(g_cvJoinMenu, "abm_joinmenu", "1", "0: Off 1: Admins only 2: Everyone");
+    SetupCvar(g_cvTeamLimit, "abm_teamlimit", "16", "Humans on team limit");
+    SetupCvar(g_cvOfferTakeover, "abm_offertakeover", "1", "0: Off 1: Survivors 2: Infected 3: All");
+    SetupCvar(g_cvStripKick, "abm_stripkick", "0", "0: Don't strip removed bots 1: Strip removed bots");
+    SetupCvar(g_cvAutoModel, "abm_automodel", "1", "1: Full set of survivors 0: Map set of survivors");
+    SetupCvar(g_cvKeepDead, "abm_keepdead", "0", "0: The dead return alive 1: the dead return dead");
+    SetupCvar(g_cvIdentityFix, "abm_identityfix", "1", "0: Do not assign identities 1: Assign identities");
+    SetupCvar(g_cvZoey, "abm_zoey", zoeyId, "0:Nick 1:Rochelle 2:Coach 3:Ellis 4:Bill 5:Zoey 6:Francis 7:Louis");
+
+    g_cvTankHealth = FindConVar("z_tank_health");
+    g_cvDvarsHandle = FindConVar("l4d2_directoroptions_overwrite");
+    g_cvMaxSwitches = FindConVar("vs_max_team_switches");
+    g_cvGameMode = FindConVar("mp_gamemode");
+    UpdateGameMode();
+
+    g_cvMaxSI = FindConVar("z_max_player_zombies");
+    SetConVarBounds(g_cvMaxSI, ConVarBound_Lower, true, 1.0);
+    SetConVarBounds(g_cvMaxSI, ConVarBound_Upper, true, 24.0);
+
+    AddCommandListener(CmdIntercept, "z_spawn");
+    AddCommandListener(CmdIntercept, "z_spawn_old");
+    AddCommandListener(CmdIntercept, "z_add");
+    AutoExecConfig(true, "abm");
+
+    // clean out client menu stacks
     for (int i = 1; i <= MaxClients; i++) {
         g_menuStack[i] = new ArrayStack(128);
     }
@@ -228,94 +250,15 @@ public OnPluginStart() {
         SetQRecord(i, true);
     }
 
-    g_cvTankHealth = FindConVar("z_tank_health");
-    g_cvDvarsHandle = FindConVar("l4d2_directoroptions_overwrite");
-    g_cvMaxSwitches = FindConVar("vs_max_team_switches");
-    g_cvGameMode = FindConVar("mp_gamemode");
-    UpdateGameMode();
-
-    CreateConVar("abm_version", PLUGIN_VERSION, "ABM plugin version", FCVAR_DONTRECORD);
-    g_cvLogLevel = CreateConVar("abm_loglevel", "0", "Development logging level 0: Off, 4: Max");
-    g_cvMinPlayers = CreateConVar("abm_minplayers", "4", "Pruning extra survivors stops at this size");
-    g_cvPrimaryWeapon = CreateConVar("abm_primaryweapon", "shotgun_chrome", "5+ survivor primary weapon");
-    g_cvSecondaryWeapon = CreateConVar("abm_secondaryweapon", "baseball_bat", "5+ survivor secondary weapon");
-    g_cvThrowable = CreateConVar("abm_throwable", "", "5+ survivor throwable item");
-    g_cvHealItem = CreateConVar("abm_healitem", "", "5+ survivor healing item");
-    g_cvConsumable = CreateConVar("abm_consumable", "adrenaline", "5+ survivor consumable item");
-    g_cvExtraPlayers = CreateConVar("abm_extraplayers", "0", "Extra survivors to start the round with");
-    g_cvTankChunkHp = CreateConVar("abm_tankchunkhp", "2500", "Health chunk per survivor on 5+ missions");
-    g_cvSpawnInterval = CreateConVar("abm_spawninterval", "36", "SI full team spawn in (5 x N)");
-    g_cvAutoHard = CreateConVar("abm_autohard", "1", "0: Off 1: Non-Vs > 4 2: Non-Vs >= 1");
-    g_cvUnlockSI = CreateConVar("abm_unlocksi", "0", "0: Off 1: Use Left 4 Downtown 2 2: Use VScript Director Options Unlocker");
-    g_cvJoinMenu = CreateConVar("abm_joinmenu", "1", "0: Off 1: Admins only 2: Everyone");
-    g_cvTeamLimit = CreateConVar("abm_teamlimit", "16", "Humans on team limit");
-    g_cvOfferTakeover = CreateConVar("abm_offertakeover", "1", "0: Off 1: Survivors 2: Infected 3: All");
-    g_cvStripKick = CreateConVar("abm_stripkick", "0", "0: Don't strip removed bots 1: Strip removed bots");
-    g_cvAutoModel = CreateConVar("abm_automodel", "1", "1: Full set of survivors 0: Map set of survivors");
-    g_cvKeepDead = CreateConVar("abm_keepdead", "0", "0: The dead return alive 1: the dead return dead");
-    g_cvIdentityFix = CreateConVar("abm_identityfix", "1", "0: Do not assign identities 1: Assign identities");
-
-    g_cvMaxSI = FindConVar("z_max_player_zombies");
-    SetConVarBounds(g_cvMaxSI, ConVarBound_Lower, true, 1.0);
-    SetConVarBounds(g_cvMaxSI, ConVarBound_Upper, true, 24.0);
-
-    char zoeyId[2];
-    switch(g_OS) {
-        case 0: Format(zoeyId, sizeof(zoeyId), "5");
-        case 1: Format(zoeyId, sizeof(zoeyId), "1");
-        default: PrintToChatAll("Zoey has gone Sarah Palin");
-    }
-
-    g_cvZoey = CreateConVar("abm_zoey", zoeyId, "0:Nick 1:Rochelle 2:Coach 3:Ellis 4:Bill 5:Zoey 6:Francis 7:Louis");
-
-    HookConVarChange(g_cvLogLevel, UpdateConVarsHook);
-    HookConVarChange(g_cvMinPlayers, UpdateConVarsHook);
-    HookConVarChange(g_cvPrimaryWeapon, UpdateConVarsHook);
-    HookConVarChange(g_cvSecondaryWeapon, UpdateConVarsHook);
-    HookConVarChange(g_cvThrowable, UpdateConVarsHook);
-    HookConVarChange(g_cvHealItem, UpdateConVarsHook);
-    HookConVarChange(g_cvConsumable, UpdateConVarsHook);
-    HookConVarChange(g_cvExtraPlayers, UpdateConVarsHook);
-    HookConVarChange(g_cvTankChunkHp, UpdateConVarsHook);
-    HookConVarChange(g_cvSpawnInterval, UpdateConVarsHook);
-    HookConVarChange(g_cvZoey, UpdateConVarsHook);
-    HookConVarChange(g_cvAutoHard, UpdateConVarsHook);
-    HookConVarChange(g_cvUnlockSI, UpdateConVarsHook);
-    HookConVarChange(g_cvJoinMenu, UpdateConVarsHook);
-    HookConVarChange(g_cvTeamLimit, UpdateConVarsHook);
-    HookConVarChange(g_cvOfferTakeover, UpdateConVarsHook);
-    HookConVarChange(g_cvGameMode, UpdateConVarsHook);
-    HookConVarChange(g_cvStripKick, UpdateConVarsHook);
-    HookConVarChange(g_cvAutoModel, UpdateConVarsHook);
-    HookConVarChange(g_cvKeepDead, UpdateConVarsHook);
-    HookConVarChange(g_cvIdentityFix, UpdateConVarsHook);
-
-    UpdateConVarsHook(g_cvLogLevel, "0", "0");
-    UpdateConVarsHook(g_cvMinPlayers, "4", "4");
-    UpdateConVarsHook(g_cvPrimaryWeapon, "shotgun_chrome", "shotgun_chrome");
-    UpdateConVarsHook(g_cvSecondaryWeapon, "baseball_bat", "baseball_bat");
-    UpdateConVarsHook(g_cvThrowable, "", "");
-    UpdateConVarsHook(g_cvHealItem, "", "");
-    UpdateConVarsHook(g_cvConsumable, "adrenaline", "adrenaline");
-    UpdateConVarsHook(g_cvExtraPlayers, "0", "0");
-    UpdateConVarsHook(g_cvTankChunkHp, "2500", "2500");
-    UpdateConVarsHook(g_cvSpawnInterval, "18", "18");
-    UpdateConVarsHook(g_cvZoey, zoeyId, zoeyId);
-    UpdateConVarsHook(g_cvAutoHard, "1", "1");
-    UpdateConVarsHook(g_cvUnlockSI, "0", "0");
-    UpdateConVarsHook(g_cvJoinMenu, "1", "1");
-    UpdateConVarsHook(g_cvTeamLimit, "16", "16");
-    UpdateConVarsHook(g_cvOfferTakeover, "1", "1");
-    UpdateConVarsHook(g_cvStripKick, "0", "0");
-    UpdateConVarsHook(g_cvAutoModel, "1", "1");
-    UpdateConVarsHook(g_cvKeepDead, "0", "0");
-    UpdateConVarsHook(g_cvIdentityFix, "1", "1");
-
-    AddCommandListener(CmdIntercept, "z_spawn");
-    AddCommandListener(CmdIntercept, "z_spawn_old");
-    AddCommandListener(CmdIntercept, "z_add");
-    AutoExecConfig(true, "abm");
     StartAD();
+}
+
+void SetupCvar(Handle &cvHandle, char[] name, char[] value, char[] details) {
+    Echo(2, "SetupCvar:");
+
+    cvHandle = CreateConVar(name, value, details);
+    HookConVarChange(cvHandle, UpdateConVarsHook);
+    UpdateConVarsHook(cvHandle, value, value);
 }
 
 public Action CmdIntercept(int client, const char[] cmd, int args) {
@@ -689,7 +632,7 @@ public Action ADTimer(Handle timer) {
                     }
                 }
 
-                if (IsClientValid(target, 0, 0)) {
+                if (IsClientValid(target, 2, 0)) {
                     SwitchToBot(i, target);
                     GoIdle(i, 0);
                 }
@@ -3422,6 +3365,8 @@ void TeamMatesMenu(int client, char [] title, int mtype=2, int target=0, bool in
 // ================================================================== //
 
 void Echo(int level, char [] format, any ...) {
+    static char g_dB[512];
+
     if (g_LogLevel >= level) {
         VFormat(g_dB, sizeof(g_dB), format, 3);
         LogToFile(LOGFILE, g_dB);

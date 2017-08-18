@@ -1,5 +1,15 @@
 # ABM Change Log
 
+## [0.1.80] - 2017-18-08
+### Added
+- SetupCvar function to help simplify in setting up new cvars
+
+### Changed
+- Huge refactoring effort in organizing and creating cvars from the source
+
+### Fixed
+- Pushing a human into any bot (SI included) when not explicitly spectating
+
 ## [0.1.79] - 2017-16-08
 ### Added
 - CmdIntercept function to watch for use of z_spawn commands
