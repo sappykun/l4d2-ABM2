@@ -1,5 +1,12 @@
 # ABM Change Log
 
+## [0.1.82] - 2017-18-08
+### Fixed
+- Players on changelevel and sm_map possibly ending up botless
+
+### Added
+- OnMapEnd is the new RoundFreezeEndHook (should fix changelevel and sm_map)
+
 ## [0.1.81] - 2017-18-08
 ### Changed
 - Optimized UpdateConVarsHook lookups

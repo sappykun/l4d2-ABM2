@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.81"
+#define PLUGIN_VERSION "0.1.82"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -276,6 +276,40 @@ public OnMapStart() {
     PrecacheModels();
 }
 
+public OnMapEnd() {
+    Echo(2, "OnMapEnd:");
+
+    if (g_ADFreeze) {
+        return;
+    }
+
+    StopAD();
+    StringMapSnapshot keys = g_QDB.Snapshot();
+    g_iQueue.Clear();
+
+    if (!g_IsVs) {
+        for (int i; i < keys.Length; i++) {
+            keys.GetKey(i, g_sB, sizeof(g_sB));
+            g_QDB.GetValue(g_sB, g_QRecord);
+            g_QRecord.GetValue("onteam", g_onteam);
+            g_QRecord.GetValue("client", g_client);
+            g_QRecord.GetValue("target", g_target);
+
+            if (g_client != g_target || g_onteam == 3) {
+                g_QRecord.SetValue("inspec", false, true);
+            }
+
+            if (g_onteam == 3) {
+                SwitchToSpec(g_client);
+                g_QRecord.SetValue("queued", true, true);
+                g_QRecord.SetString("model", "", true);
+            }
+        }
+    }
+
+    delete keys;
+}
+
 public OnEntityCreated(int ent, const char[] clsName) {
     Echo(2, "OnEntityCreated: %d %s", ent, clsName);
 
@@ -331,32 +365,7 @@ public Action L4D_OnGetScriptValueInt(const String:key[], &retVal) {
 
 public RoundFreezeEndHook(Handle event, const char[] name, bool dontBroadcast) {
     Echo(2, "RoundFreezeEndHook: %s", name);
-
-    if (g_ADFreeze) {
-        return;
-    }
-
-    StopAD();
-    StringMapSnapshot keys = g_QDB.Snapshot();
-    g_iQueue.Clear();
-
-    if (!g_IsVs) {
-        for (int i; i < keys.Length; i++) {
-            keys.GetKey(i, g_sB, sizeof(g_sB));
-            g_QDB.GetValue(g_sB, g_QRecord);
-            g_QRecord.GetValue("onteam", g_onteam);
-            g_QRecord.GetValue("client", g_client);
-
-            if (g_onteam == 3) {
-                SwitchToSpec(g_client);
-                g_QRecord.SetValue("queued", true, true);
-                g_QRecord.SetValue("inspec", false, true);
-                g_QRecord.SetString("model", "", true);
-            }
-        }
-    }
-
-    delete keys;
+    OnMapEnd();
 }
 
 public PlayerActivateHook(Handle event, const char[] name, bool dontBroadcast) {
