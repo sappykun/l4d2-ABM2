@@ -1,5 +1,12 @@
 # ABM Change Log
 
+## [0.1.81] - 2017-18-08
+### Changed
+- Optimized UpdateConVarsHook lookups
+
+### Fixed
+- OnPluginStart cvar definition order
+
 ## [0.1.80] - 2017-18-08
 ### Added
 - SetupCvar function to help simplify in setting up new cvars

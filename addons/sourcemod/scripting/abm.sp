@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.80"
+#define PLUGIN_VERSION "0.1.81"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -203,6 +203,16 @@ public OnPluginStart() {
         case 1: zoeyId = "1";  // Zoey crashes Windows servers, 1 is Rochelle
     }
 
+    g_cvTankHealth = FindConVar("z_tank_health");
+    g_cvDvarsHandle = FindConVar("l4d2_directoroptions_overwrite");
+    g_cvMaxSwitches = FindConVar("vs_max_team_switches");
+    g_cvGameMode = FindConVar("mp_gamemode");
+    UpdateGameMode();
+
+    g_cvMaxSI = FindConVar("z_max_player_zombies");
+    SetConVarBounds(g_cvMaxSI, ConVarBound_Lower, true, 1.0);
+    SetConVarBounds(g_cvMaxSI, ConVarBound_Upper, true, 24.0);
+
     SetupCvar(g_cvVersion, "abm_version", PLUGIN_VERSION, "ABM plugin version");
     SetupCvar(g_cvLogLevel, "abm_loglevel", "0", "Development logging level 0: Off, 4: Max");
     SetupCvar(g_cvMinPlayers, "abm_minplayers", "4", "Pruning extra survivors stops at this size");
@@ -225,21 +235,6 @@ public OnPluginStart() {
     SetupCvar(g_cvIdentityFix, "abm_identityfix", "1", "0: Do not assign identities 1: Assign identities");
     SetupCvar(g_cvZoey, "abm_zoey", zoeyId, "0:Nick 1:Rochelle 2:Coach 3:Ellis 4:Bill 5:Zoey 6:Francis 7:Louis");
 
-    g_cvTankHealth = FindConVar("z_tank_health");
-    g_cvDvarsHandle = FindConVar("l4d2_directoroptions_overwrite");
-    g_cvMaxSwitches = FindConVar("vs_max_team_switches");
-    g_cvGameMode = FindConVar("mp_gamemode");
-    UpdateGameMode();
-
-    g_cvMaxSI = FindConVar("z_max_player_zombies");
-    SetConVarBounds(g_cvMaxSI, ConVarBound_Lower, true, 1.0);
-    SetConVarBounds(g_cvMaxSI, ConVarBound_Upper, true, 24.0);
-
-    AddCommandListener(CmdIntercept, "z_spawn");
-    AddCommandListener(CmdIntercept, "z_spawn_old");
-    AddCommandListener(CmdIntercept, "z_add");
-    AutoExecConfig(true, "abm");
-
     // clean out client menu stacks
     for (int i = 1; i <= MaxClients; i++) {
         g_menuStack[i] = new ArrayStack(128);
@@ -250,6 +245,10 @@ public OnPluginStart() {
         SetQRecord(i, true);
     }
 
+    AddCommandListener(CmdIntercept, "z_spawn");
+    AddCommandListener(CmdIntercept, "z_spawn_old");
+    AddCommandListener(CmdIntercept, "z_add");
+    AutoExecConfig(true, "abm");
     StartAD();
 }
 
@@ -724,91 +723,99 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
         return;
     }
 
-    else if (StrEqual(name, "abm_loglevel")) {
-        g_LogLevel = GetConVarInt(g_cvLogLevel);
+    if (name[0] == 'a') {
+        if (name[4] == 'a') {
+            if (name[8] == 'h' && StrEqual(name, "abm_autohard")) {
+                g_AutoHard = GetConVarInt(g_cvAutoHard);
+                AutoSetTankHp();
+            }
+
+            else if (name[8] == 'm' && StrEqual(name, "abm_automodel")) {
+                g_AutoModel = GetConVarInt(g_cvAutoModel);
+            }
+        }
+
+        else if (name[4] == 'c' && StrEqual(name, "abm_consumable")) {
+            GetConVarString(g_cvConsumable, g_Consumable, sizeof(g_Consumable));
+        }
+
+        else if (name[4] == 'e' && StrEqual(name, "abm_extraplayers")) {
+            g_ExtraPlayers = GetConVarInt(g_cvExtraPlayers);
+        }
+
+        else if (name[4] == 'h' && StrEqual(name, "abm_healitem")) {
+            GetConVarString(g_cvHealItem, g_HealItem, sizeof(g_HealItem));
+        }
+
+        else if (name[4] == 'i' && StrEqual(name, "abm_identityfix")) {
+            g_IdentityFix = GetConVarInt(g_cvIdentityFix);
+        }
+
+        else if (name[4] == 'j' && StrEqual(name, "abm_joinmenu")) {
+            g_JoinMenu = GetConVarInt(g_cvJoinMenu);
+        }
+
+        else if (name[4] == 'k' && StrEqual(name, "abm_keepdead")) {
+            g_KeepDead = GetConVarInt(g_cvKeepDead);
+        }
+
+        else if (name[4] == 'l' && StrEqual(name, "abm_loglevel")) {
+            g_LogLevel = GetConVarInt(g_cvLogLevel);
+        }
+
+        else if (name[4] == 'm' && StrEqual(name, "abm_minplayers")) {
+            g_MinPlayers = GetConVarInt(g_cvMinPlayers);
+        }
+
+        else if (name[4] == 'o' && StrEqual(name, "abm_offertakeover")) {
+            g_OfferTakeover = GetConVarInt(g_cvOfferTakeover);
+        }
+
+        else if (name[4] == 'p' && StrEqual(name, "abm_primaryweapon")) {
+            GetConVarString(g_cvPrimaryWeapon, g_PrimaryWeapon, sizeof(g_PrimaryWeapon));
+        }
+
+        else if (name[4] == 's') {
+            if (name[5] == 'e' && StrEqual(name, "abm_secondaryweapon")) {
+                GetConVarString(g_cvSecondaryWeapon, g_SecondaryWeapon, sizeof(g_SecondaryWeapon));
+            }
+
+            else if (name[5] == 'p' && StrEqual(name, "abm_spawninterval")) {
+                g_SpawnInterval = GetConVarInt(g_cvSpawnInterval);
+            }
+
+            else if (name[5] == 't' && StrEqual(name, "abm_stripkick")) {
+                g_StripKick = GetConVarInt(g_cvStripKick);
+            }
+        }
+
+        else if (name[4] == 't') {
+            if (name[5] == 'a' && StrEqual(name, "abm_tankchunkhp")) {
+                g_TankChunkHp = GetConVarInt(g_cvTankChunkHp);
+                AutoSetTankHp();
+            }
+
+            else if (name[5] == 'e' && StrEqual(name, "abm_teamlimit")) {
+                g_TeamLimit = GetConVarInt(g_cvTeamLimit);
+            }
+
+            else if (name[5] == 'h' && StrEqual(name, "abm_throwable")) {
+                GetConVarString(g_cvThrowable, g_Throwable, sizeof(g_Throwable));
+            }
+        }
+
+        else if (name[4] == 'u' && StrEqual(name, "abm_unlocksi")) {
+            g_UnlockSI = GetConVarInt(g_cvUnlockSI);
+            RegulateSI();
+        }
+
+        else if (name[4] == 'z' && StrEqual(name, "abm_zoey")) {
+            g_Zoey = GetConVarInt(g_cvZoey);
+        }
     }
 
-    else if (StrEqual(name, "abm_extraplayers")) {
-        g_ExtraPlayers = GetConVarInt(g_cvExtraPlayers);
-    }
-
-    else if (StrEqual(name, "abm_tankchunkhp")) {
-        g_TankChunkHp = GetConVarInt(g_cvTankChunkHp);
-        AutoSetTankHp();
-    }
-
-    else if (StrEqual(name, "abm_spawninterval")) {
-        g_SpawnInterval = GetConVarInt(g_cvSpawnInterval);
-    }
-
-    else if (StrEqual(name, "abm_primaryweapon")) {
-        GetConVarString(g_cvPrimaryWeapon, g_PrimaryWeapon, sizeof(g_PrimaryWeapon));
-    }
-
-    else if (StrEqual(name, "abm_secondaryweapon")) {
-        GetConVarString(g_cvSecondaryWeapon, g_SecondaryWeapon, sizeof(g_SecondaryWeapon));
-    }
-
-    else if (StrEqual(name, "abm_throwable")) {
-        GetConVarString(g_cvThrowable, g_Throwable, sizeof(g_Throwable));
-    }
-
-    else if (StrEqual(name, "abm_healitem")) {
-        GetConVarString(g_cvHealItem, g_HealItem, sizeof(g_HealItem));
-    }
-
-    else if (StrEqual(name, "abm_consumable")) {
-        GetConVarString(g_cvConsumable, g_Consumable, sizeof(g_Consumable));
-    }
-
-    else if (StrEqual(name, "abm_minplayers")) {
-        g_MinPlayers = GetConVarInt(g_cvMinPlayers);
-    }
-
-    else if (StrEqual(name, "abm_autohard")) {
-        g_AutoHard = GetConVarInt(g_cvAutoHard);
-        AutoSetTankHp();
-    }
-
-    else if (StrEqual(name, "abm_unlocksi")) {
-        g_UnlockSI = GetConVarInt(g_cvUnlockSI);
-        RegulateSI();
-    }
-
-    else if (StrEqual(name, "abm_joinmenu")) {
-        g_JoinMenu = GetConVarInt(g_cvJoinMenu);
-    }
-
-    else if (StrEqual(name, "abm_teamlimit")) {
-        g_TeamLimit = GetConVarInt(g_cvTeamLimit);
-    }
-
-    else if (StrEqual(name, "abm_offertakeover")) {
-        g_OfferTakeover = GetConVarInt(g_cvOfferTakeover);
-    }
-
-    else if (StrEqual(name, "mp_gamemode")) {
+    else if (name[0] == 'm' && StrEqual(name, "mp_gamemode")) {
         UpdateGameMode();
-    }
-
-    else if (StrEqual(name, "abm_zoey")) {
-        g_Zoey = GetConVarInt(g_cvZoey);
-    }
-
-    else if (StrEqual(name, "abm_stripkick")) {
-        g_StripKick = GetConVarInt(g_cvStripKick);
-    }
-
-    else if (StrEqual(name, "abm_automodel")) {
-        g_AutoModel = GetConVarInt(g_cvAutoModel);
-    }
-
-    else if (StrEqual(name, "abm_keepdead")) {
-        g_KeepDead = GetConVarInt(g_cvKeepDead);
-    }
-
-    else if (StrEqual(name, "abm_identityfix")) {
-        g_IdentityFix = GetConVarInt(g_cvIdentityFix);
     }
 }
 
