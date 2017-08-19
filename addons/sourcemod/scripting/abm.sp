@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.82"
+#define PLUGIN_VERSION "0.1.83"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -2283,6 +2283,8 @@ public _AutoModel(int client) {
             }
         }
     }
+
+    SDKUnhook(client, SDKHook_SpawnPost, AutoModel);
 }
 
 void GetAllSurvivorModels(client=-1) {
