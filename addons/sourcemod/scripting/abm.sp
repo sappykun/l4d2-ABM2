@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.83"
+#define PLUGIN_VERSION "0.1.84"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -253,7 +253,7 @@ public OnPluginStart() {
 }
 
 void SetupCvar(Handle &cvHandle, char[] name, char[] value, char[] details) {
-    Echo(2, "SetupCvar:");
+    Echo(2, "SetupCvar: %s %s %s", name, value, details);
 
     cvHandle = CreateConVar(name, value, details);
     HookConVarChange(cvHandle, UpdateConVarsHook);
@@ -261,7 +261,7 @@ void SetupCvar(Handle &cvHandle, char[] name, char[] value, char[] details) {
 }
 
 public Action CmdIntercept(int client, const char[] cmd, int args) {
-    Echo(2, "CmdIntercept:");
+    Echo(2, "CmdIntercept: %d %s %d", client, cmd, args);
 
     if (g_AssistedSpawning) {
         GhostsModeProtector(0);
@@ -1057,7 +1057,7 @@ bool IsAdmin(int client) {
 }
 
 bool IsEntityValid(int ent) {
-    Echo(1, "IsEntityValid: %d", ent);
+    Echo(2, "IsEntityValid: %d", ent);
     return (ent > MaxClients && ent <= 2048 && IsValidEntity(ent));
 }
 
@@ -1325,7 +1325,7 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
     int target = GetClientOfUserId(userid);
 
     GetClientName(target, g_pN, sizeof(g_pN));
-    if (StrContains(g_pN, "ABMclient") >= 0) {
+    if (g_pN[0] == 'A' && StrContains(g_pN, "ABMclient") >= 0) {
         return;
     }
 
@@ -2502,7 +2502,12 @@ bool TakeoverBotSig(int client, int target) {
 
         else if (IsClientValid(target, 2, 0)) {
             if (GetRealClient(target) != client) {
-                GetBotCharacter(target, g_model);
+
+                if (g_model[0] == EOS) {
+                    _AutoModel(client);
+                }
+
+                GetBotCharacter(client, g_model);
                 g_QRecord.SetString("model", g_model, true);
                 Echo(1, "--5: %N is model '%s'", client, g_model);
             }

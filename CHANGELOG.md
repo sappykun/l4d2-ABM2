@@ -1,5 +1,14 @@
 # ABM Change Log
 
+## [0.1.84] - 2017-26-08
+### Fixed
+- Clients without a model are automodeled on first takeover
+
+### Changed
+- Echos detailed for SetupCvar and CmdIntercept functions
+- IsEntityValid Echo level raised to 2 to match other functions
+- OnSpawnHook optimized just a bit
+
 ## [0.1.83] - 2017-19-08
 ### Fixed
 - Regression in performance due to not unhooking in AutoModel
