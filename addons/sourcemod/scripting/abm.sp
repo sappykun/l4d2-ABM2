@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.84"
+#define PLUGIN_VERSION "0.1.85"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -88,6 +88,7 @@ bool g_inspec, g_tmpInspec;         // g_QDB check client's specator mode
 bool g_status, g_tmpStatus;         // g_QDB client life state
 bool g_update, g_tmpUpdate;         // g_QDB should we update this record?
 char g_model[64], g_tmpModel[64];   // g_QDB client's model
+bool g_modeled; g_tmpModeled;       // g_QDB has this client ever been automodeled?
 float g_origin[3], g_tmpOrigin[3];  // g_QDB client's origin vector
 int g_models[8];
 Handle g_AD;                        // Assistant Director Timer
@@ -1180,6 +1181,7 @@ bool GetQRtmp(int client) {
             g_QRtmp.GetValue("inspec", g_tmpInspec);
             g_QRtmp.GetValue("status", g_tmpStatus);
             g_QRtmp.GetValue("update", g_tmpUpdate);
+            g_QRtmp.GetValue("modeled", g_tmpModeled);
             g_QRtmp.GetString("model", g_tmpModel, sizeof(g_tmpModel));
 
             if (g_tmpModel[0] == EOS) {
@@ -1216,6 +1218,7 @@ bool GetQRecord(int client) {
             g_QRecord.GetValue("inspec", g_inspec);
             g_QRecord.GetValue("status", g_status);
             g_QRecord.GetValue("update", g_update);
+            g_QRecord.GetValue("modeled", g_modeled);
             g_QRecord.GetString("model", g_model, sizeof(g_model));
 
             if (g_model[0] == EOS) {
@@ -1247,6 +1250,7 @@ bool NewQRecord(int client) {
     g_QRecord.SetValue("status", true, true);
     g_QRecord.SetValue("update", false, true);
     g_QRecord.SetString("model", "", true);
+    g_QRecord.SetValue("modeled", false, true);
     return true;
 }
 
@@ -2255,11 +2259,11 @@ public _AutoModel(int client) {
     if (g_AutoModel && IsClientValid(client, 2)) {
         static int realClient;
         realClient = GetRealClient(client);
-        if (GetQRecord(realClient) && g_model[0] != EOS) {
+        if (GetQRecord(realClient) && g_modeled) {
             return;
         }
 
-        static set;
+        static int set;
         set = GetClientModelIndex(client);
         switch (set >= 0 && set <= 3) {
             case 1: set = 0;  // l4d2 survivor set
@@ -2267,6 +2271,12 @@ public _AutoModel(int client) {
         }
 
         GetAllSurvivorModels(client);
+
+        if (realClient != client) {
+            if (g_models[GetClientModelIndex(client)] <= 1) {
+                return;
+            }
+        }
 
         for (int i = 0; i < 4; i++) {
             for (int index = set; index < sizeof(g_models); index++) {
@@ -2285,6 +2295,16 @@ public _AutoModel(int client) {
     }
 
     SDKUnhook(client, SDKHook_SpawnPost, AutoModel);
+}
+
+public Action AutoModelTimer(Handle timer, int client) {
+    Echo(2, "AutoModelTimer: %d", client);
+
+    if (GetQRecord(client)) {
+        g_QRecord.SetValue("modeled", true, true);
+    }
+
+    _AutoModel(client);
 }
 
 void GetAllSurvivorModels(client=-1) {
@@ -2503,11 +2523,11 @@ bool TakeoverBotSig(int client, int target) {
         else if (IsClientValid(target, 2, 0)) {
             if (GetRealClient(target) != client) {
 
-                if (g_model[0] == EOS) {
-                    _AutoModel(client);
+                if (!g_modeled) {
+                    CreateTimer(1.0, AutoModelTimer, client);
                 }
 
-                GetBotCharacter(client, g_model);
+                GetBotCharacter(target, g_model);
                 g_QRecord.SetString("model", g_model, true);
                 Echo(1, "--5: %N is model '%s'", client, g_model);
             }

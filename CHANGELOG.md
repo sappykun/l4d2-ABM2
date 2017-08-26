@@ -1,5 +1,12 @@
 # ABM Change Log
 
+## [0.1.85] - 2017-06-08
+### Fixed
+- Clients without a model are automodeled on first takeover (fixed)
+
+### Added
+- g_modeled and g_tmpModeled detect if a client was ever automodeled
+
 ## [0.1.84] - 2017-26-08
 ### Fixed
 - Clients without a model are automodeled on first takeover
