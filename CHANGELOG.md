@@ -5,7 +5,7 @@
 - Detection for multiple game types e.g., mutation12, community1
 
 ### Fixed
-- Regression not properly deteting a change to mp_gamemode
+- Regression not properly detecting live change to mp_gamemode
 
 ## [0.1.85] - 2017-26-08
 ### Fixed

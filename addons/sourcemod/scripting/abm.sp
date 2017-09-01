@@ -884,8 +884,16 @@ void UpdateGameMode() {
     Echo(2, "UpdateGameMode");
 
     switch (GetGameType()) {
-        case 0: g_IsCoop = true;
-        case 1, 2: g_IsVs = true;
+        case 0: {
+            g_IsCoop = true;
+            g_IsVs = false;
+        }
+
+        case 1, 2: {
+            g_IsVs = true;
+            g_IsCoop = false;
+        }
+
         //case -1: halt?
     }
 }
