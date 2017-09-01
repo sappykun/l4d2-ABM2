@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.85"
+#define PLUGIN_VERSION "0.1.86"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -140,16 +140,6 @@ public Plugin myinfo= {
     url = "https://gitlab.com/vbgunz/ABM"
 }
 
-void UpdateGameMode() {
-    Echo(2, "UpdateGameMode");
-
-    if (g_cvGameMode != null) {
-        GetConVarString(g_cvGameMode, g_sB, sizeof(g_sB));
-        g_IsVs = (StrEqual(g_sB, "versus") || StrEqual(g_sB, "scavenge"));
-        g_IsCoop = StrEqual(g_sB, "coop");
-    }
-}
-
 public OnPluginStart() {
     Echo(2, "OnPluginStart");
 
@@ -208,6 +198,7 @@ public OnPluginStart() {
     g_cvDvarsHandle = FindConVar("l4d2_directoroptions_overwrite");
     g_cvMaxSwitches = FindConVar("vs_max_team_switches");
     g_cvGameMode = FindConVar("mp_gamemode");
+    HookConVarChange(g_cvGameMode, UpdateConVarsHook);
     UpdateGameMode();
 
     g_cvMaxSI = FindConVar("z_max_player_zombies");
@@ -826,6 +817,76 @@ public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) 
 
     else if (name[0] == 'm' && StrEqual(name, "mp_gamemode")) {
         UpdateGameMode();
+    }
+}
+
+int GetGameType() {
+    Echo(2, "GetGameType");
+
+    // 0: coop 1: versus 2: scavenge 3: survival
+    GetConVarString(g_cvGameMode, g_sB, sizeof(g_sB));
+
+    switch (g_sB[0]) {
+        case 'c': {
+            if (StrEqual(g_sB, "coop")) return 0;
+            else if (StrEqual(g_sB, "community1")) return 0;  // Special Delivery
+            else if (StrEqual(g_sB, "community2")) return 0;  // Flu Season
+            else if (StrEqual(g_sB, "community3")) return 1;  // Riding My Survivor
+            else if (StrEqual(g_sB, "community4")) return 3;  // Nightmare
+            else if (StrEqual(g_sB, "community5")) return 0;  // Death's Door
+        }
+
+        case 'm': {
+            if (StrEqual(g_sB, "mutation1")) return 0;        // Last Man on Earth
+            else if (StrEqual(g_sB, "mutation2")) return 0;   // Headshot!
+            else if (StrEqual(g_sB, "mutation3")) return 0;   // Bleed Out
+            else if (StrEqual(g_sB, "mutation4")) return 0;   // Hard Eight
+            else if (StrEqual(g_sB, "mutation5")) return 0;   // Four Swordsmen
+            else if (StrEqual(g_sB, "mutation7")) return 0;   // Chainsaw Massacre
+            else if (StrEqual(g_sB, "mutation8")) return 0;   // Ironman
+            else if (StrEqual(g_sB, "mutation9")) return 0;   // Last Gnome on Earth
+            else if (StrEqual(g_sB, "mutation10")) return 0;  // Room for One
+            else if (StrEqual(g_sB, "mutation11")) return 1;  // Healthpackalypse
+            else if (StrEqual(g_sB, "mutation12")) return 1;  // Realism Versus
+            else if (StrEqual(g_sB, "mutation13")) return 2;  // Follow the Liter
+            else if (StrEqual(g_sB, "mutation14")) return 0;  // Gib Fest
+            else if (StrEqual(g_sB, "mutation15")) return 3;  // Versus Survival
+            else if (StrEqual(g_sB, "mutation16")) return 0;  // Hunting Party
+            else if (StrEqual(g_sB, "mutation17")) return 0;  // Lone Gunman
+            else if (StrEqual(g_sB, "mutation18")) return 1;  // Bleed Out Versus
+            else if (StrEqual(g_sB, "mutation19")) return 1;  // Taaannnkk!
+            else if (StrEqual(g_sB, "mutation20")) return 0;  // Healing Gnome
+        }
+
+        case 'r': {
+            if (StrEqual(g_sB, "realism")) return 0;
+        }
+
+        case 's': {
+            if (StrEqual(g_sB, "scavenge")) return 2;
+            else if (StrEqual(g_sB, "survival")) return 3;
+        }
+
+        case 't': {
+            if (StrEqual(g_sB, "teamscavenge")) return 2;
+            else if (StrEqual(g_sB, "teamversus")) return 1;
+        }
+
+        case 'v': {
+            if (StrEqual(g_sB, "versus")) return 1;
+        }
+    }
+
+    return -1;
+}
+
+void UpdateGameMode() {
+    Echo(2, "UpdateGameMode");
+
+    switch (GetGameType()) {
+        case 0: g_IsCoop = true;
+        case 1, 2: g_IsVs = true;
+        //case -1: halt?
     }
 }
 
@@ -2263,11 +2324,14 @@ public _AutoModel(int client) {
             return;
         }
 
-        static int set;
-        set = GetClientModelIndex(client);
-        switch (set >= 0 && set <= 3) {
-            case 1: set = 0;  // l4d2 survivor set
-            case 0: set = 4;  // l4d1 survivor set
+        static int set = -1;
+
+        if (set == -1) {
+            set = GetClientModelIndex(client);
+            switch (set >= 0 && set <= 3) {
+                case 1: set = 0;  // l4d2 survivor set
+                case 0: set = 4;  // l4d1 survivor set
+            }
         }
 
         GetAllSurvivorModels(client);

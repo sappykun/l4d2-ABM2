@@ -1,6 +1,13 @@
 # ABM Change Log
 
-## [0.1.85] - 2017-06-08
+## [0.1.86] - 2017-26-08
+### Added
+- Detection for multiple game types e.g., mutation12, community1
+
+### Fixed
+- Regression not properly deteting a change to mp_gamemode
+
+## [0.1.85] - 2017-26-08
 ### Fixed
 - Clients without a model are automodeled on first takeover (fixed)
 
@@ -252,7 +259,7 @@
 - Cleaned up AddInfected function, trying to reduce CreateFakeClient
 - Cleaned up L4D_OnGetScriptValueInt (match VScript Director Options Unlocker)
 - Cleaned up UpdateConVarsHook
-- abm_unlocksi now defaults to 0 
+- abm_unlocksi now defaults to 0
 
 ## [0.1.45] - 2017-13-07
 ### Fixed
