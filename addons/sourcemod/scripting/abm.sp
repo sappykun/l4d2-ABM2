@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.86"
+#define PLUGIN_VERSION "0.1.87"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -1529,13 +1529,18 @@ public Action ForceSpawnTimer(Handle timer, any client) {
         }
 
         if (GetClientTeam(client) == 3) {
-            PrintHintText(client, "KILL ALL HUMANS");
+            static int x;
+            x = GetConVarInt(FindConVar("z_frustration"));
+            SetEntProp(client, Prop_Send, "m_frustration",!x);
+            PrintHintText(client, "KILL ALL HUMANS = %d");
+            SetEntProp(client, Prop_Send, "m_frustration", x);
         }
     }
 
     i = times[client] = 20;
     return Plugin_Stop;
 }
+
 public Action OnSpawnHookTimer(Handle timer, any target) {
     Echo(2, "OnSpawnHookTimer: %d", target);
 

@@ -1,5 +1,9 @@
 # ABM Change Log
 
+## [0.1.87] - 2017-07-09
+### Fixed
+- Tank under human control unable to attack in non-competitive modes
+
 ## [0.1.86] - 2017-26-08
 ### Added
 - Detection for multiple game types e.g., mutation12, community1
