@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.87"
+#define PLUGIN_VERSION "0.1.88"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -1966,9 +1966,9 @@ void Takeover(int client, int onteam) {
         }
 
         int nextBot;
-        nextBot = GetNextBot(onteam);
+        nextBot = GetNextBot(onteam, 0, true);
 
-        if (nextBot >= 1) {
+        if (IsClientValid(nextBot)) {
             SwitchToBot(client, nextBot);
             return;
         }
@@ -2096,28 +2096,37 @@ int GetClientManager(int target) {
     return result;
 }
 
-int GetNextBot(int onteam, int skipIndex=0, alive=false) {
-    Echo(2, "GetNextBot: %d %d", onteam, skipIndex);
+int GetNextBot(int onteam, int start=1, alive=false) {
+    Echo(2, "GetNextBot: %d %d %d", onteam, start, alive);
 
-    int bot;
+    static bot, j;
+    bot = 0;
+    j = start;
+
+    if (onteam == 3) {
+        alive = true;
+    }
 
     for (int i = 1; i <= MaxClients; i++) {
-        if (GetClientManager(i) == 0) {
-            if (GetClientTeam(i) == onteam) {
-                if (bot == 0) {
-                    if (!alive || alive && IsPlayerAlive(i)) {
-                        bot = i;
-                    }
-                }
+        if (j > 32) {
+            j = 1;
+        }
 
-                if (i > skipIndex) {
-                    if (!alive || alive && IsPlayerAlive(i)) {
-                        bot = i;
-                        break;
-                    }
-                }
+        if (IsClientValid(j, onteam, 0)) {
+            if (onteam == 2) {
+                bot = j;
+            }
+
+            if (alive && IsPlayerAlive(j)) {
+                return j;
+            }
+
+            else if (!alive) {
+                return j;
             }
         }
+
+        j++;
     }
 
     return bot;
@@ -2132,7 +2141,7 @@ void CycleBots(int client, int onteam) {
 
     if (GetQRecord(client)) {
         int bot = GetNextBot(onteam, g_lastid, true);
-        if (GetClientManager(bot) == 0) {
+        if (IsClientValid(bot, onteam, 0)) {
             SwitchToBot(client, bot, false);
         }
     }
@@ -2545,13 +2554,15 @@ void SetHumanSpecSig(int bot, int client) {
         hSpec = EndPrepSDKCall();
     }
 
-    if(hSpec != null) {
-        SDKCall(hSpec, bot, client);
-    }
+    if (IsClientValid(client) && IsClientValid(bot)) {
+        if(hSpec != null) {
+            SDKCall(hSpec, bot, client);
+        }
 
-    else {
-        PrintToChat(client, "[ABM] SetHumanSpecSig Signature broken.");
-        SetFailState("[ABM] SetHumanSpecSig Signature broken.");
+        else {
+            PrintToChat(client, "[ABM] SetHumanSpecSig Signature broken.");
+            SetFailState("[ABM] SetHumanSpecSig Signature broken.");
+        }
     }
 }
 

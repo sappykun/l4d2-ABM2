@@ -1,5 +1,10 @@
 # ABM Change Log
 
+## [0.1.88] - 2017-26-09
+### Fixed
+- Players taking over the dead when a living bot is available
+- Takeover errors
+
 ## [0.1.87] - 2017-07-09
 ### Fixed
 - Tank under human control unable to attack in non-competitive modes
