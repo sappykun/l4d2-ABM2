@@ -39,7 +39,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.88"
+#define PLUGIN_VERSION "0.1.89"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -2113,16 +2113,18 @@ int GetNextBot(int onteam, int start=1, alive=false) {
         }
 
         if (IsClientValid(j, onteam, 0)) {
-            if (onteam == 2) {
-                bot = j;
-            }
+            if (GetClientManager(j) == 0) {
+                if (onteam == 2) {
+                    bot = j;
+                }
 
-            if (alive && IsPlayerAlive(j)) {
-                return j;
-            }
+                if (alive && IsPlayerAlive(j)) {
+                    return j;
+                }
 
-            else if (!alive) {
-                return j;
+                else if (!alive) {
+                    return j;
+                }
             }
         }
 

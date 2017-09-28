@@ -2,6 +2,10 @@
 
 ## [0.1.88] - 2017-26-09
 ### Fixed
+- Unable to get into game if no bots available and someone is idle
+
+## [0.1.88] - 2017-26-09
+### Fixed
 - Players taking over the dead when a living bot is available
 - Takeover errors
 
