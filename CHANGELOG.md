@@ -1,6 +1,10 @@
 # ABM Change Log
 
-## [0.1.88] - 2017-26-09
+## [0.1.90]- 2017-29-09
+### Fixed
+- An error when a player is Tank in non-coop and let's the timer run out
+
+## [0.1.89]- 2017-28-09
 ### Fixed
 - Unable to get into game if no bots available and someone is idle
 

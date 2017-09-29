@@ -1532,7 +1532,7 @@ public Action ForceSpawnTimer(Handle timer, any client) {
             static int x;
             x = GetConVarInt(FindConVar("z_frustration"));
             SetEntProp(client, Prop_Send, "m_frustration",!x);
-            PrintHintText(client, "KILL ALL HUMANS = %d");
+            PrintHintText(client, "KILL ALL HUMANS");
             SetEntProp(client, Prop_Send, "m_frustration", x);
         }
     }
