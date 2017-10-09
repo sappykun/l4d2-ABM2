@@ -1,10 +1,39 @@
 # ABM Change Log
 
-## [0.1.90]- 2017-29-09
+## [0.1.91] - 2017-09-10
+### Removed
+- g_RemovedPlayers & g_AddedPlayers booleans
+- AutoModelTimer (will trust in SDKHook_SpawnPost)
+
+### Added
+- g_ADAssistant (repeatedly checks and starts the AD)
+- g_survivorSet (0 = l4d2 survivors, 4 = l4d1 survivors)
+- g_survivorSetScan (bool to check if we grabbed the set)
+- GetSurvivorSet function figures out if survivors are l4d1 or l4d2
+
+### Changed
+- Survivors spawn in faster (no more waiting on everyone to load)
+- Survival now added to UpdateGameMode switch
+- Players in Vs will no longer auto idle on join
+- ADTimer has been simplified and optimized
+- CountTeamMates has been simplified and optimized
+- _AutoModel has been simplified and optimized
+- GetAllSurvivorModels has been simplified and optimized
+- SetHumanSpecSig will now scan for duplicate m_humanSpectatorUserID
+- Cleaned up some lingering comments
+- OnMapEnd is a lot more thorough in cleaning up
+- Survivor queue is cleared in OnMapEnd
+
+### Fixed
+- abm-info correctly reflects Model in Vs (beware sm_cvar mp_restartgame 1)
+- CountTeamMates not effectively setting g_MaxSI in some situations
+- Many Vs issues
+
+## [0.1.90] - 2017-29-09
 ### Fixed
 - An error when a player is Tank in non-coop and let's the timer run out
 
-## [0.1.89]- 2017-28-09
+## [0.1.89] - 2017-28-09
 ### Fixed
 - Unable to get into game if no bots available and someone is idle
 

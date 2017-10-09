@@ -21,16 +21,6 @@ Free Software Foundation, Inc.
 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-// Lux mentions the following will fix Tank death leave during animation
-// which causes a new tank to spawn and possibly for people to get stuck
-// Lux: z_tank_incapacitated_decay_rate 65000
-// Lux: z_tank_incapacitated_health 1
-
-// TODO:
-//SetEntProp(client, Prop_Send,"m_bHasNightVision", 1);
-//SetEntProp(client, Prop_Send, "m_bNightVisionOn", 1);
-//AcceptEntityInput(client, "clearparent");  // find out which one works!
-
 #pragma semicolon 1
 #include <sourcemod>
 #include <sdktools>
@@ -39,7 +29,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.90"
+#define PLUGIN_VERSION "0.1.91"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -91,13 +81,15 @@ char g_model[64], g_tmpModel[64];   // g_QDB client's model
 bool g_modeled; g_tmpModeled;       // g_QDB has this client ever been automodeled?
 float g_origin[3], g_tmpOrigin[3];  // g_QDB client's origin vector
 int g_models[8];
+
+Handle g_ADAssistant;               // Tries to make sure the AD starts
 Handle g_AD;                        // Assistant Director Timer
+int g_survivorSet;                  // 0 = l4d2 survivors, 4 = l4d1 survivors
+bool g_survivorSetScan;             // Check to discover the survivor set
 
 bool g_IsVs;
 bool g_IsCoop;
 bool g_AssistedSpawning = false;
-bool g_RemovedPlayers = false;
-bool g_AddedPlayers = false;
 bool g_ADFreeze = true;
 int g_ADInterval;
 
@@ -271,31 +263,32 @@ public OnMapStart() {
 public OnMapEnd() {
     Echo(2, "OnMapEnd:");
 
-    if (g_ADFreeze) {
-        return;
-    }
-
     StopAD();
     StringMapSnapshot keys = g_QDB.Snapshot();
     g_iQueue.Clear();
+    g_sQueue.Clear();
 
-    if (!g_IsVs) {
-        for (int i; i < keys.Length; i++) {
-            keys.GetKey(i, g_sB, sizeof(g_sB));
-            g_QDB.GetValue(g_sB, g_QRecord);
-            g_QRecord.GetValue("onteam", g_onteam);
-            g_QRecord.GetValue("client", g_client);
-            g_QRecord.GetValue("target", g_target);
+    for (int i; i < keys.Length; i++) {
+        keys.GetKey(i, g_sB, sizeof(g_sB));
+        g_QDB.GetValue(g_sB, g_QRecord);
 
-            if (g_client != g_target || g_onteam == 3) {
-                g_QRecord.SetValue("inspec", false, true);
-            }
+        g_QRecord.GetValue("onteam", g_onteam);
+        g_QRecord.GetValue("client", g_client);
+        g_QRecord.GetValue("target", g_target);
+        g_QRecord.SetValue("status",true,true);
 
-            if (g_onteam == 3) {
-                SwitchToSpec(g_client);
-                g_QRecord.SetValue("queued", true, true);
-                g_QRecord.SetString("model", "", true);
-            }
+        if (g_onteam >= 2) {
+            g_QRecord.SetValue("inspec", false, true);
+        }
+
+        if (g_IsVs) {
+            g_QRecord.SetString("model", "", true);
+        }
+
+        else if (g_onteam == 3) {
+            SwitchToSpec(g_client);
+            g_QRecord.SetValue("queued", true, true);
+            g_QRecord.SetString("model", "", true);
         }
     }
 
@@ -372,12 +365,11 @@ void PlayerActivate(int client) {
     Echo(2, "PlayerActivate: %d", client);
 
     if (GetQRecord(client)) {
+        g_QRecord.SetString("model", "", true);
         StartAD();
 
-        if (!g_IsVs) {
-            if (g_onteam == 3) {
-                SwitchTeam(client, 3);
-            }
+        if (!g_IsVs && g_onteam == 3) {
+            SwitchTeam(client, 3);
         }
     }
 }
@@ -512,8 +504,7 @@ bool StopAD() {
     if (g_AD != null) {
         g_ADFreeze = true;
         g_AssistedSpawning = false;
-        g_RemovedPlayers = false;
-        g_AddedPlayers = false;
+        g_survivorSetScan = true;
         g_ADInterval = 0;
 
         delete g_AD;
@@ -526,11 +517,14 @@ bool StopAD() {
 bool StartAD() {
     Echo(2, "StartAD");
 
+    // under some situations, the g_AD won't start. this insures it will
+    if (g_ADAssistant == null && g_AD == null) {
+        g_ADAssistant = CreateTimer(1.0, StartADTimer, _, TIMER_REPEAT);
+    }
+
     if (g_AD == null) {
         g_ADFreeze = true;
         g_AssistedSpawning = false;
-        g_RemovedPlayers = false;
-        g_AddedPlayers = false;
         g_ADInterval = 0;
 
         g_AD = CreateTimer(
@@ -541,128 +535,76 @@ bool StartAD() {
     return g_AD != null;
 }
 
-public Action ADTimer(Handle timer) {
-    Echo(4, "ADTimer");
+public Action StartADTimer(Handle timer) {
+    Echo(6, "StartADTimer");
 
-    if (g_ADFreeze) {
-        for (int i = 1; i <= MaxClients; i++) {
-            if (IsClientConnected(i)) {
-                if (!IsClientInGame(i)) {
-                    Echo(2, " -- ADTimer: Client %d isn't loaded in yet.", i);
-                    return Plugin_Continue;
-                }
-
-                else {
-                    if (!g_IsVs) {
-                        if (GetQRecord(i)) {
-                            if (g_onteam == 3 && g_queued) {
-                                SwitchTeam(i, 3);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Echo(2, " -- ADTimer: All clients are loaded in. Assisting.");
-        g_ADFreeze = false;
-
-        if (g_AutoModel) {
-            for (int i = 1; i <= MaxClients; i++) {
-                if (IsClientValid(i, 2, 0)) {
-                    AutoModel(i);
-                }
-            }
-        }
+    if (StartAD()) {
+        g_ADAssistant=null;
+        return Plugin_Stop;
     }
 
-    g_ADInterval++;
-    int teamSize = CountTeamMates(2);
+    return Plugin_Continue;
+}
 
-    if (teamSize == 0) {
+public Action ADTimer(Handle timer) {
+    Echo(6, "ADTimer");
+
+    static int survivors, playQuota;
+    survivors = CountTeamMates(2);
+    playQuota = g_MinPlayers + g_ExtraPlayers;
+
+    static bool takeover;
+    takeover = !g_IsVs || (g_IsVs && !g_ADFreeze);
+
+    if (survivors == 0) {
         g_ADInterval = 0;
         return Plugin_Continue;
     }
 
+    if (survivors < playQuota) {
+        MkBots(playQuota * -1, 2);
+        return Plugin_Continue;
+    }
+
+    if (g_ADFreeze) {
+        RmBots(playQuota * -1, 2);
+        g_ADFreeze = false;
+    }
+
     g_AssistedSpawning = false;
-    int onteam;
 
     for (int i = 1; i <= MaxClients; i++) {
-        if (GetQRtmp(i)) {
-            if (g_tmpOnteam == 3) {
-                if (!g_IsVs) {
-                    g_AssistedSpawning = true;
+        if (IsClientValid(GetRealClient(i), 2, 0)) {
+            if (IsPlayerAlive(i)) {
+                _AutoModel(i);
+            }
+        }
 
-                    if (!IsPlayerAlive(i) && !g_tmpQueued && !g_tmpInspec) {
-                        g_QRtmp.SetValue("queued", true, true);
-                        QueueUp(i, 3);
-                    }
+        else if (GetQRtmp(i)) {
+            if (!g_IsVs && g_tmpOnteam == 3) {
+                g_AssistedSpawning = true;
+
+                if (GetClientTeam(i) <= 1) {
+                    QueueUp(i, 3);
+                    SwitchTeam(i, 3);
                 }
-
-                continue;
-            }
-
-            onteam = GetClientTeam(i);
-            if (onteam == 3) {
-                continue;
-            }
-
-            if (g_ADInterval == 1 && onteam == 2) {
-                SwitchTeam(i, 2);
-                //GoIdle(i, 0);  // can cause looping at start
             }
 
             else if (!g_tmpInspec && GetClientTeam(i) <= 1) {
-                int jj;
-                int target;
-
-                for (int j = 1; j <= MaxClients; j++) {
-                    if (IsClientValid(j, 2, 0)) {
-                        jj = GetRealClient(j);
-
-                        if (jj == i) {
-                            target = j;
-                            break;
-                        }
-
-                        if (jj == j && IsFakeClient(jj)) {
-                            target = j;
-                            continue;
-                        }
-                    }
-                }
-
-                if (IsClientValid(target, 2, 0)) {
-                    SwitchToBot(i, target);
-                    GoIdle(i, 0);
-                }
-
-                else if (!g_tmpInspec && onteam <= 1) {
+                if (takeover) {
+                    g_QRtmp.SetValue("onteam", 0,true);
                     CreateTimer(0.1, TakeoverTimer, i);
-                    CreateTimer(0.5, AutoIdleTimer, i, TIMER_REPEAT);
                 }
             }
         }
     }
 
-    if (!g_RemovedPlayers && CountTeamMates(2) >= 1) {
-        RmBots((g_MinPlayers + g_ExtraPlayers) * -1, 2);
-        g_RemovedPlayers = true;
-    }
-
-    if (g_RemovedPlayers) {
-        if (!g_AddedPlayers && CountTeamMates(2) >= 1) {
-            MkBots((g_MinPlayers + g_ExtraPlayers) * -1, 2);
-            g_AddedPlayers = true;
-        }
-    }
-
-    static lastSize;
+    static int lastSize;
     bool autoWave;
 
     if (g_IsCoop) {
-        if (lastSize != teamSize) {
-            lastSize = teamSize;
+        if (lastSize != survivors) {
+            lastSize = survivors;
             AutoSetTankHp();
             RegulateSI();
         }
@@ -673,7 +615,7 @@ public Action ADTimer(Handle timer) {
 
     switch (g_IsVs) {
         case 1: autoWave = false;
-        case 0: autoWave = g_AutoHard == 2 || teamSize > 4 && g_AutoHard == 1;
+        case 0: autoWave = g_AutoHard == 2 || survivors > 4 && g_AutoHard == 1;
     }
 
     if (autoWave || g_AssistedSpawning) {
@@ -681,17 +623,18 @@ public Action ADTimer(Handle timer) {
             if (g_ADInterval >= g_SpawnInterval) {
                 if (g_ADInterval % g_SpawnInterval == 0) {
                     Echo(2, " -- Assisting SI %d: Matching Full Team", g_ADInterval);
-                    MkBots(teamSize * -1, 3);
+                    MkBots(survivors * -1, 3);
                 }
 
                 else if (g_ADInterval % (g_SpawnInterval / 2) == 0) {
                     Echo(2, " -- Assisting SI %d: Matching Half Team", g_ADInterval);
-                    MkBots((teamSize / 2) * -1, 3);
+                    MkBots((survivors / 2) * -1, 3);
                 }
             }
         }
     }
 
+    g_ADInterval++;
     return Plugin_Continue;
 }
 
@@ -894,7 +837,10 @@ void UpdateGameMode() {
             g_IsCoop = false;
         }
 
-        //case -1: halt?
+        case 3: {
+            g_IsVs = false;
+            g_IsCoop = false;
+        }
     }
 }
 
@@ -993,7 +939,6 @@ public OnClientPostAdminCheck(int client) {
         }
 
         else {
-            // ^ !GetQRecord(client)
             int status = g_status;
             int onteam = g_onteam;
 
@@ -1019,7 +964,7 @@ public OnClientPostAdminCheck(int client) {
 public Action AutoIdleTimer(Handle timer, int client) {
     Echo(2, "AutoIdleTimer: %d", client);
 
-    if (!IsClientValid(client)) {
+    if (g_IsVs || !IsClientValid(client)) {
         return Plugin_Stop;
     }
 
@@ -1406,12 +1351,6 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
     int client;
 
     if (onteam == 3) {
-
-        // set glows for troubleshooting SI
-        //int iGlowColour = 4278124800;
-        //SetEntProp(target, Prop_Send, "m_iGlowType", 3);
-        //SetEntProp(target, Prop_Send, "m_glowColorOverride", iGlowColour);
-
         if (!g_IsVs) {
             if (g_AssistedSpawning) {
                 int zClass = GetEntProp(target, Prop_Send, "m_zombieClass");
@@ -1751,7 +1690,7 @@ void RespawnClient(int client, int target=0) {
     if (pos1[0] != 0 && pos1[1] != 0 && pos1[2] != 0) {
         RoundRespawnSig(client);
 
-        if (weaponizePlayer) {
+        if (!g_ADFreeze && weaponizePlayer) {
             QuickCheat(client, "give", g_PrimaryWeapon);
             QuickCheat(client, "give", g_SecondaryWeapon);
             QuickCheat(client, "give", g_Throwable);
@@ -2041,43 +1980,31 @@ int CountTeamMates(int onteam, int mtype=2) {
     // mtype 1: counts only humans
     // mtype 2: counts all players on team
 
-    if (g_ADFreeze) {
-        return 0;
-    }
+    static int clients, bots, humans;
+    clients = bots = humans = 0;
 
-    int result;
+    for (int i = 1; i <= MaxClients; i++) {
+        if (IsClientValid(i, onteam)) {
+            clients++;
 
-    if (mtype == 2) {
-        result = GetTeamClientCount(onteam);
-    }
-
-    else {
-
-        int bots;
-        int humans;
-
-        for (int i = 1; i <= MaxClients; i++) {
-            if (IsClientValid(i, onteam)) {
-                switch (IsFakeClient(GetRealClient(i))) {
-                    case 1: bots++;
-                    case 0: humans++;
-                }
+            switch (IsFakeClient(GetRealClient(i))) {
+                case 1: bots++;
+                case 0: humans++;
             }
         }
-
-        switch (mtype) {
-            case 0: result = bots;
-            case 1: result = humans;
-            case 2: result = bots + humans;
-        }
     }
 
-    if (onteam == 2 && result > 0) {
-        g_MaxSI = result;
-        SetConVarFloat(g_cvMaxSI, float(result));
+    if (onteam == 2 && clients > 0) {
+        g_MaxSI = clients;
+        SetConVarFloat(g_cvMaxSI, float(clients));
     }
 
-    return result;
+    switch (mtype) {
+        case 0: clients = bots;
+        case 1: clients = humans;
+    }
+
+    return clients;
 }
 
 int GetClientManager(int target) {
@@ -2341,6 +2268,10 @@ void AutoModel(int client) {
 public _AutoModel(int client) {
     Echo(5, "_AutoModel: %d", client);
 
+    if (IsClientValid(client, 2)) {
+        SDKUnhook(client, SDKHook_SpawnPost, AutoModel);
+    }
+
     if (g_AutoModel && IsClientValid(client, 2)) {
         static int realClient;
         realClient = GetRealClient(client);
@@ -2348,22 +2279,14 @@ public _AutoModel(int client) {
             return;
         }
 
-        static int set = -1;
-
-        if (set == -1) {
-            set = GetClientModelIndex(client);
-            switch (set >= 0 && set <= 3) {
-                case 1: set = 0;  // l4d2 survivor set
-                case 0: set = 4;  // l4d1 survivor set
-            }
-        }
-
+        static int set, survivors, character;
+        set = GetSurvivorSet(client);
         GetAllSurvivorModels(client);
 
-        if (realClient != client) {
-            if (g_models[GetClientModelIndex(client)] <= 1) {
-                return;
-            }
+        survivors = CountTeamMates(2);
+        character = g_models[GetClientModelIndex(client)];
+        if (character == 0 || character < survivors / 8) {
+            return;
         }
 
         for (int i = 0; i < 4; i++) {
@@ -2381,18 +2304,22 @@ public _AutoModel(int client) {
             }
         }
     }
-
-    SDKUnhook(client, SDKHook_SpawnPost, AutoModel);
 }
 
-public Action AutoModelTimer(Handle timer, int client) {
-    Echo(2, "AutoModelTimer: %d", client);
+int GetSurvivorSet(int client) {
+    Echo(6, "GetSurvivorSet: %d", client);
 
-    if (GetQRecord(client)) {
-        g_QRecord.SetValue("modeled", true, true);
+    if (g_survivorSetScan && IsClientValid(client, 2)) {
+        g_survivorSetScan = false;
+        g_survivorSet = GetClientModelIndex(client);
+
+        switch (g_survivorSet >= 0 && g_survivorSet <= 3) {
+            case 1: g_survivorSet = 0;  // l4d2 survivor set
+            case 0: g_survivorSet = 4;  // l4d1 survivor set
+        }
     }
 
-    _AutoModel(client);
+    return g_survivorSet;
 }
 
 void GetAllSurvivorModels(client=-1) {
@@ -2409,16 +2336,12 @@ void GetAllSurvivorModels(client=-1) {
 
         index = -1;
 
-        if (IsClientValid(i, 0, 1) && client != i) {
-            if (GetQRecord(i) && g_onteam == 2 && g_model[0] != EOS) {
-                index = GetModelIndexByName(g_model, 2);
-            }
+        if (GetQRecord(i) && g_onteam == 2 && g_model[0] != EOS) {
+            index = GetModelIndexByName(g_model, 2);
         }
 
-        else if (IsClientValid(i, 2, 0) && client != i) {
-            if (GetRealClient(i) == i && IsPlayerAlive(i)) {
-                index = GetClientModelIndex(i);
-            }
+        else if (IsClientValid(i, 2, 0) && GetRealClient(i) == i) {
+            index = GetClientModelIndex(i);
         }
 
         if (index >= 0) {
@@ -2558,7 +2481,18 @@ void SetHumanSpecSig(int bot, int client) {
 
     if (IsClientValid(client) && IsClientValid(bot)) {
         if(hSpec != null) {
+            static int spec, userid;
+            userid = GetClientUserId(client);
             SDKCall(hSpec, bot, client);
+
+            for (int i = 1; i <= MaxClients; i++) {
+                if (IsClientValid(i, 2, 0)) {
+                    spec = GetEntProp(i, Prop_Send, "m_humanSpectatorUserID");
+                    if (userid == spec && i != bot) {
+                        SetEntProp(i, Prop_Send, "m_humanSpectatorUserID", 0);
+                    }
+                }
+            }
         }
 
         else {
@@ -2612,11 +2546,6 @@ bool TakeoverBotSig(int client, int target) {
 
         else if (IsClientValid(target, 2, 0)) {
             if (GetRealClient(target) != client) {
-
-                if (!g_modeled) {
-                    CreateTimer(1.0, AutoModelTimer, client);
-                }
-
                 GetBotCharacter(target, g_model);
                 g_QRecord.SetString("model", g_model, true);
                 Echo(1, "--5: %N is model '%s'", client, g_model);
