@@ -1,5 +1,25 @@
 # ABM Change Log
 
+## [0.1.92] - 2017-13-10
+### Removed
+- g_modeled & g_tmpModeled booleans (gonna count on s != EOS)
+
+### Changed
+- GetBotCharacter now wraps GetSurvivorCharacter & GetInfectedCharacter
+- Survivors spawn in even faster than 1.91
+- StartAD now calls StopAD for clean up and resetting
+
+### Added
+- ResetClientSpecUserId function resets conflicting m_humanSpectatorUserID's
+- AllClientsLoadedIn function to check if all clients connected are in game
+
+### Fixed
+- Inability to remove survivor bots below the minimum values
+- Duplicate survivor characters based on disconnected clients
+- Survivor characters getting skewed based on clients in idle
+- abm-info not updating some information in certain situations
+- Possible errors in log due to using "delete" over "KillTimer"
+
 ## [0.1.91] - 2017-09-10
 ### Removed
 - g_RemovedPlayers & g_AddedPlayers booleans

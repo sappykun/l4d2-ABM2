@@ -29,7 +29,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.91"
+#define PLUGIN_VERSION "0.1.92"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -78,7 +78,6 @@ bool g_inspec, g_tmpInspec;         // g_QDB check client's specator mode
 bool g_status, g_tmpStatus;         // g_QDB client life state
 bool g_update, g_tmpUpdate;         // g_QDB should we update this record?
 char g_model[64], g_tmpModel[64];   // g_QDB client's model
-bool g_modeled; g_tmpModeled;       // g_QDB has this client ever been automodeled?
 float g_origin[3], g_tmpOrigin[3];  // g_QDB client's origin vector
 int g_models[8];
 
@@ -404,56 +403,6 @@ int GetRealClient(int client) {
     return client;
 }
 
-void GetBotCharacter(int client, char strBuffer[64]) {
-    Echo(2, "GetBotCharacter: %d", client);
-
-    strBuffer = "";
-
-    if (IsClientValid(client)) {
-        if (IsFakeClient(client)) {
-            GetClientName(client, strBuffer, sizeof(strBuffer));
-            int i = FindCharInString(strBuffer, ')');
-
-            if (i != -1) {
-                strcopy(strBuffer, sizeof(strBuffer), strBuffer[i + 1]);
-            }
-
-            return;
-        }
-
-        switch (GetClientTeam(client)) {
-            case 2: {
-                GetEntPropString(client, Prop_Data, "m_ModelName", g_sB, sizeof(g_sB));
-                for (int i = 0; i < sizeof(g_SurvivorPaths); i++) {
-                    if (StrEqual(g_SurvivorPaths[i], g_sB)) {
-                        Format(strBuffer, sizeof(strBuffer), g_SurvivorNames[i]);
-                        break;
-                    }
-                }
-            }
-
-            case 3: {
-                if (IsPlayerAlive(client)) {
-                    int flag = GetEntProp(client, Prop_Send, "m_isGhost");
-                    SetEntProp(client, Prop_Send, "m_isGhost", 0);
-
-                    switch (GetEntProp(client, Prop_Send, "m_zombieClass")) {
-                        case 1: strBuffer = "Smoker";
-                        case 2: strBuffer = "Boomer";
-                        case 3: strBuffer = "Hunter";
-                        case 4: strBuffer = "Spitter";
-                        case 5: strBuffer = "Jockey";
-                        case 6: strBuffer = "Charger";
-                        case 8: strBuffer = "Tank";
-                    }
-
-                    SetEntProp(client, Prop_Send, "m_isGhost", flag);
-                }
-            }
-        }
-    }
-}
-
 public Action LifeCheckTimer(Handle timer, int target) {
     Echo(2, "LifeCheckTimer: %d", target);
 
@@ -507,29 +456,22 @@ bool StopAD() {
         g_survivorSetScan = true;
         g_ADInterval = 0;
 
-        delete g_AD;
+        KillTimer(g_AD); // delete causes errors?
         g_AD = null;
     }
 
     return g_AD == null;
 }
 
-bool StartAD() {
+bool StartAD(float interval=0.5) {
     Echo(2, "StartAD");
 
-    // under some situations, the g_AD won't start. this insures it will
-    if (g_ADAssistant == null && g_AD == null) {
-        g_ADAssistant = CreateTimer(1.0, StartADTimer, _, TIMER_REPEAT);
+    if (g_ADAssistant == null) {
+        g_ADAssistant = CreateTimer(0.1, StartADTimer, _, TIMER_REPEAT);
     }
 
-    if (g_AD == null) {
-        g_ADFreeze = true;
-        g_AssistedSpawning = false;
-        g_ADInterval = 0;
-
-        g_AD = CreateTimer(
-            5.0, ADTimer, _, TIMER_REPEAT
-        );
+    if (StopAD()) {
+        g_AD = CreateTimer(interval, ADTimer, _, TIMER_REPEAT);
     }
 
     return g_AD != null;
@@ -538,12 +480,25 @@ bool StartAD() {
 public Action StartADTimer(Handle timer) {
     Echo(6, "StartADTimer");
 
-    if (StartAD()) {
-        g_ADAssistant=null;
-        return Plugin_Stop;
+    if (g_AD == null) {
+        StartAD();
+        return Plugin_Continue;
     }
 
-    return Plugin_Continue;
+    g_ADAssistant = null;
+    return Plugin_Stop;
+}
+
+bool AllClientsLoadedIn() {
+    Echo(2, "AllClientsLoadedIn");
+
+    for (int i = 1; i <= MaxClients; i++) {
+        if (IsClientConnected(i) && !IsClientInGame(i)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 public Action ADTimer(Handle timer) {
@@ -557,18 +512,24 @@ public Action ADTimer(Handle timer) {
     takeover = !g_IsVs || (g_IsVs && !g_ADFreeze);
 
     if (survivors == 0) {
-        g_ADInterval = 0;
-        return Plugin_Continue;
-    }
-
-    if (survivors < playQuota) {
-        MkBots(playQuota * -1, 2);
         return Plugin_Continue;
     }
 
     if (g_ADFreeze) {
-        RmBots(playQuota * -1, 2);
-        g_ADFreeze = false;
+        g_ADInterval = 0;
+
+        if (survivors < playQuota) {
+            while (CountTeamMates(2) < playQuota) {
+                AddSurvivor();
+            }
+
+            return Plugin_Continue;
+        }
+
+        if (AllClientsLoadedIn() && StartAD(5.0)) {
+            RmBots(playQuota * -1, 2);
+            g_ADFreeze = false;
+        }
     }
 
     g_AssistedSpawning = false;
@@ -581,6 +542,11 @@ public Action ADTimer(Handle timer) {
         }
 
         else if (GetQRtmp(i)) {
+
+            //if (IsClientValid(g_tmpTarget, 2, 0)) {
+            //    ResetClientSpecUserId(i, g_tmpTarget);
+            //}
+
             if (!g_IsVs && g_tmpOnteam == 3) {
                 g_AssistedSpawning = true;
 
@@ -1046,6 +1012,7 @@ void RemoveQDBKey(int client) {
 
     if (GetQRecord(client)) {
         g_QRecord.SetValue("update", true, true);
+        g_QRecord.SetString("model", "", true);
 
         if (g_onteam == 2) {
             int survivors = CountTeamMates(2);
@@ -1195,13 +1162,11 @@ bool GetQRtmp(int client) {
             g_QRtmp.GetValue("inspec", g_tmpInspec);
             g_QRtmp.GetValue("status", g_tmpStatus);
             g_QRtmp.GetValue("update", g_tmpUpdate);
-            g_QRtmp.GetValue("modeled", g_tmpModeled);
             g_QRtmp.GetString("model", g_tmpModel, sizeof(g_tmpModel));
 
-            if (g_tmpModel[0] == EOS) {
-                GetBotCharacter(client, g_tmpModel);
+            if (g_tmpModel[0] == EOS || g_tmpOnteam == 3) {
+                GetBotCharacter(g_tmpTarget, g_tmpModel);
                 g_QRtmp.SetString("model", g_tmpModel, true);
-
             }
 
             Echo(1, "-t1: %N is model '%s'", client, g_tmpModel);
@@ -1232,11 +1197,10 @@ bool GetQRecord(int client) {
             g_QRecord.GetValue("inspec", g_inspec);
             g_QRecord.GetValue("status", g_status);
             g_QRecord.GetValue("update", g_update);
-            g_QRecord.GetValue("modeled", g_modeled);
             g_QRecord.GetString("model", g_model, sizeof(g_model));
 
-            if (g_model[0] == EOS) {
-                GetBotCharacter(client, g_model);
+            if (g_model[0] == EOS || g_onteam == 3) {
+                GetBotCharacter(g_target, g_model);
                 g_QRecord.SetString("model", g_model, true);
             }
 
@@ -1264,7 +1228,6 @@ bool NewQRecord(int client) {
     g_QRecord.SetValue("status", true, true);
     g_QRecord.SetValue("update", false, true);
     g_QRecord.SetString("model", "", true);
-    g_QRecord.SetValue("modeled", false, true);
     return true;
 }
 
@@ -2275,7 +2238,7 @@ public _AutoModel(int client) {
     if (g_AutoModel && IsClientValid(client, 2)) {
         static int realClient;
         realClient = GetRealClient(client);
-        if (GetQRecord(realClient) && g_modeled) {
+        if (GetQRecord(realClient) && g_model[0] != EOS) {
             return;
         }
 
@@ -2439,6 +2402,45 @@ bool IsClientsModel(int client, char [] name) {
     return StrEqual(name, g_sB);
 }
 
+void GetBotCharacter(int client, char strBuffer[64]) {
+    Echo(2, "GetBotCharacter: %d", client);
+
+    if (IsClientValid(client)) {
+        strBuffer = "";
+
+        switch (GetClientTeam(client)) {
+            case 2: GetSurvivorCharacter(client, strBuffer);
+            case 3: GetInfectedCharacter(client, strBuffer);
+        }
+    }
+}
+
+void GetSurvivorCharacter(int client, char strBuffer[64]) {
+    Echo(2, "GetSurvivorCharacter: %d %s", client, strBuffer);
+
+    GetEntPropString(client, Prop_Data, "m_ModelName", g_sB, sizeof(g_sB));
+    for (int i = 0; i < sizeof(g_SurvivorPaths); i++) {
+        if (StrEqual(g_SurvivorPaths[i], g_sB)) {
+            Format(strBuffer, sizeof(strBuffer), g_SurvivorNames[i]);
+            break;
+        }
+    }
+}
+
+void GetInfectedCharacter(int client, char strBuffer[64]) {
+    Echo(2, "GetInfectedCharacter: %d %s", client, strBuffer);
+
+    switch (GetEntProp(client, Prop_Send, "m_zombieClass")) {
+        case 1: strBuffer = "Smoker";
+        case 2: strBuffer = "Boomer";
+        case 3: strBuffer = "Hunter";
+        case 4: strBuffer = "Spitter";
+        case 5: strBuffer = "Jockey";
+        case 6: strBuffer = "Charger";
+        case 8: strBuffer = "Tank";
+    }
+}
+
 // ================================================================== //
 // BLACK MAGIC SIGNATURES. SOME SPOOKY SHIT.
 // ================================================================== //
@@ -2481,23 +2483,33 @@ void SetHumanSpecSig(int bot, int client) {
 
     if (IsClientValid(client) && IsClientValid(bot)) {
         if(hSpec != null) {
-            static int spec, userid;
-            userid = GetClientUserId(client);
             SDKCall(hSpec, bot, client);
-
-            for (int i = 1; i <= MaxClients; i++) {
-                if (IsClientValid(i, 2, 0)) {
-                    spec = GetEntProp(i, Prop_Send, "m_humanSpectatorUserID");
-                    if (userid == spec && i != bot) {
-                        SetEntProp(i, Prop_Send, "m_humanSpectatorUserID", 0);
-                    }
-                }
-            }
+            ResetClientSpecUserId(client, bot);
         }
 
         else {
             PrintToChat(client, "[ABM] SetHumanSpecSig Signature broken.");
             SetFailState("[ABM] SetHumanSpecSig Signature broken.");
+        }
+    }
+}
+
+void ResetClientSpecUserId(int client, int target) {
+    Echo(2, "ResetClientSpecUserId: %d %d", client, target);
+
+    if (!IsClientValid(client) || !IsClientValid(target)) {
+        return;
+    }
+
+    static int spec, userid;
+    userid = GetClientUserId(client);
+
+    for (int i = 1; i <= MaxClients; i++) {
+        if (IsClientValid(i, 2, 0)) {
+            spec = GetEntProp(i, Prop_Send, "m_humanSpectatorUserID");
+            if (userid == spec && i != target) {
+                SetEntProp(i, Prop_Send, "m_humanSpectatorUserID", 0);
+            }
         }
     }
 }
@@ -2545,13 +2557,14 @@ bool TakeoverBotSig(int client, int target) {
         }
 
         else if (IsClientValid(target, 2, 0)) {
+            SwitchToSpec(client);
+
             if (GetRealClient(target) != client) {
                 GetBotCharacter(target, g_model);
                 g_QRecord.SetString("model", g_model, true);
                 Echo(1, "--5: %N is model '%s'", client, g_model);
             }
 
-            SwitchToSpec(client);
             SetHumanSpecSig(target, client);
             SDKCall(hSwitch, client, true);
 
