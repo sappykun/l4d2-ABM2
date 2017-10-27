@@ -1,4 +1,8 @@
 # ABM Change Log
+## [0.1.94] - 2017-27-10
+### Changed
+- Adding/Removing extra survivor bots on round is smoother
+
 ## [0.1.93] - 2017-27-10
 ### Changed
 - Source is now #pragma newdecls required

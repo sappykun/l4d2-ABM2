@@ -29,7 +29,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.93"
+#define PLUGIN_VERSION "0.1.94"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -506,35 +506,32 @@ public Action ADTimer(Handle timer) {
 
     static int survivors, playQuota;
     survivors = CountTeamMates(2);
-    playQuota = g_MinPlayers + g_ExtraPlayers;
-
-    static bool takeover;
-    takeover = !g_IsVs || (g_IsVs && !g_ADFreeze);
 
     if (survivors == 0) {
         return Plugin_Continue;
     }
 
-    if (g_ADFreeze) {
-        g_ADInterval = 0;
-
-        if (survivors < playQuota) {
-            while (CountTeamMates(2) < playQuota) {
-                AddSurvivor();
-            }
-
-            return Plugin_Continue;
-        }
-
-        if (AllClientsLoadedIn() && StartAD(5.0)) {
-            RmBots(playQuota * -1, 2);
-            g_ADFreeze = false;
-        }
-    }
-
+    static bool takeover;
+    takeover = !g_IsVs || (g_IsVs && !g_ADFreeze);
+    playQuota = g_MinPlayers + g_ExtraPlayers;
     g_AssistedSpawning = false;
 
     for (int i = 1; i <= MaxClients; i++) {
+        if (g_ADFreeze) {
+            g_ADInterval = 0;
+
+            if (CountTeamMates(2) >= 4 || AllClientsLoadedIn()) {
+                while (CountTeamMates(2) < playQuota) {
+                    AddSurvivor();
+                }
+
+                if (AllClientsLoadedIn() && StartAD(5.0)) {
+                    RmBots(playQuota * -1, 2);
+                    g_ADFreeze = false;
+                }
+            }
+        }
+
         if (IsClientValid(GetRealClient(i), 2, 0)) {
             if (IsPlayerAlive(i)) {
                 _AutoModel(i);
