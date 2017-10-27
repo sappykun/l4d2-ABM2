@@ -1,4 +1,7 @@
 # ABM Change Log
+## [0.1.93] - 2017-27-10
+### Changed
+- Source is now #pragma newdecls required
 
 ## [0.1.92] - 2017-13-10
 ### Removed

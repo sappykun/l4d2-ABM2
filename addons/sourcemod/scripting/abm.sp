@@ -21,15 +21,15 @@ Free Software Foundation, Inc.
 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#pragma semicolon 1
 #include <sourcemod>
 #include <sdktools>
 #include <sdkhooks>
-
+#pragma semicolon 1
+//#pragma newdecls required
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.92"
+#define PLUGIN_VERSION "0.1.93"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -45,7 +45,7 @@ g_menuItems[MAXPLAYERS + 1][2];
 // menu tracking
 #define g_callBacks g_menuStack[client]
 ArrayStack g_menuStack[MAXPLAYERS + 1];
-new Function:callBack;
+Function callBack;
 
 char g_QKey[64];      // holds players by STEAM_ID
 StringMap g_QDB;      // holds player records linked by STEAM_ID
@@ -131,7 +131,7 @@ public Plugin myinfo= {
     url = "https://gitlab.com/vbgunz/ABM"
 }
 
-public OnPluginStart() {
+public void OnPluginStart() {
     Echo(2, "OnPluginStart");
 
     g_GameData = LoadGameConfigFile("abm");
@@ -254,12 +254,12 @@ public Action CmdIntercept(int client, const char[] cmd, int args) {
     return Plugin_Continue;
 }
 
-public OnMapStart() {
+public void OnMapStart() {
     Echo(2, "OnMapStart:");
     PrecacheModels();
 }
 
-public OnMapEnd() {
+public void OnMapEnd() {
     Echo(2, "OnMapEnd:");
 
     StopAD();
@@ -294,7 +294,7 @@ public OnMapEnd() {
     delete keys;
 }
 
-public OnEntityCreated(int ent, const char[] clsName) {
+public void OnEntityCreated(int ent, const char[] clsName) {
     Echo(2, "OnEntityCreated: %d %s", ent, clsName);
 
     if (clsName[0] == 'f') {
@@ -322,7 +322,7 @@ public Action KillEntTimer(Handle timer, any ref) {
     return Plugin_Stop;
 }
 
-public Action L4D_OnGetScriptValueInt(const String:key[], &retVal) {
+public Action L4D_OnGetScriptValueInt(const char[] key, int &retVal) {
     Echo(5, "L4D_OnGetScriptValueInt: %s, %d", key, retVal);
 
     // see UpdateConVarsHook "g_UnlockSI" for VScript Director Options Unlocker
@@ -347,12 +347,12 @@ public Action L4D_OnGetScriptValueInt(const String:key[], &retVal) {
     return Plugin_Continue;
 }
 
-public RoundFreezeEndHook(Handle event, const char[] name, bool dontBroadcast) {
+public void RoundFreezeEndHook(Handle event, const char[] name, bool dontBroadcast) {
     Echo(2, "RoundFreezeEndHook: %s", name);
     OnMapEnd();
 }
 
-public PlayerActivateHook(Handle event, const char[] name, bool dontBroadcast) {
+public void PlayerActivateHook(Handle event, const char[] name, bool dontBroadcast) {
     Echo(2, "PlayerActivateHook: %s", name);
 
     int userid = GetEventInt(event, "userid");
@@ -423,7 +423,7 @@ public Action LifeCheckTimer(Handle timer, int target) {
     }
 }
 
-public OnAllSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
+public void OnAllSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
     Echo(2, "OnAllSpawnHook: %s", name);
 
     int userid = GetEventInt(event, "userid");
@@ -434,7 +434,7 @@ public OnAllSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
     }
 }
 
-public RoundStartHook(Handle event, const char[] name, bool dontBroadcast) {
+public void RoundStartHook(Handle event, const char[] name, bool dontBroadcast) {
     Echo(2, "RoundStartHook: %s", name);
     StartAD();
 
@@ -518,17 +518,33 @@ public Action ADTimer(Handle timer) {
     if (g_ADFreeze) {
         g_ADInterval = 0;
 
-        if (survivors < playQuota) {
-            while (CountTeamMates(2) < playQuota) {
-                AddSurvivor();
+        for (int i = 1; i <= MaxClients; i++) {
+            if (IsClientValid(GetRealClient(i), 2, 1)) {
+//             if (IsClientConnected(i) && IsClientInGame(i)) {
+//
+//                 if (IsFakeClient(i)) {
+//                     continue;
+//                 }
+
+                if (survivors < playQuota) {
+                    while (CountTeamMates(2) < playQuota) {
+                        AddSurvivor();
+                    }
+
+                    return Plugin_Continue;
+                }
+
+                else if (survivors > playQuota) {
+                    RmBots(1, 2);
+                }
+
+                if (AllClientsLoadedIn() && StartAD(5.0)) {
+                    RmBots(playQuota * -1, 2);
+                    g_ADFreeze = false;
+                }
+
+                break;
             }
-
-            return Plugin_Continue;
-        }
-
-        if (AllClientsLoadedIn() && StartAD(5.0)) {
-            RmBots(playQuota * -1, 2);
-            g_ADFreeze = false;
         }
     }
 
@@ -604,7 +620,7 @@ public Action ADTimer(Handle timer) {
     return Plugin_Continue;
 }
 
-public UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) {
+public void UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] newCv) {
     GetConVarName(convar, g_sB, sizeof(g_sB));
     Echo(2, "UpdateConVarsHook: %s %s %s", g_sB, oldCv, newCv);
 
@@ -813,7 +829,7 @@ void UpdateGameMode() {
 void RegulateSI() {
     Echo(2, "RegulateSI");
 
-    static lastSISize;
+    static int lastSISize;
 
     if (g_DvarsCheck && g_cvDvarsHandle != null) {
         if (g_UnlockSI == 2 && g_MaxSI > 4) {
@@ -858,7 +874,7 @@ void AutoSetTankHp() {
     SetConVarInt(g_cvTankHealth, tankHp);
 }
 
-public OnConfigsExecuted() {
+public void OnConfigsExecuted() {
     Echo(2, "OnConfigsExecuted");
 
     if (!g_DvarsCheck) {
@@ -892,7 +908,7 @@ public OnConfigsExecuted() {
     }
 }
 
-public OnClientPostAdminCheck(int client) {
+public void OnClientPostAdminCheck(int client) {
     Echo(2, "OnClientPostAdminCheck: %d", client);
 
     if (!IsFakeClient(client)) {
@@ -934,7 +950,7 @@ public Action AutoIdleTimer(Handle timer, int client) {
         return Plugin_Stop;
     }
 
-    static onteam;
+    static int onteam;
     onteam = GetClientTeam(client);
 
     if (onteam >= 2) {
@@ -948,7 +964,7 @@ public Action AutoIdleTimer(Handle timer, int client) {
     return Plugin_Continue;
 }
 
-public GoIdleHook(Handle event, const char[] name, bool dontBroadcast) {
+public void GoIdleHook(Handle event, const char[] name, bool dontBroadcast) {
     Echo(2, "GoIdleHook: %s", name);
     int player = GetEventInt(event, "player");
     int client = GetClientOfUserId(player);
@@ -999,7 +1015,7 @@ void GoIdle(int client, int onteam=0) {
     }
 }
 
-public CleanQDBHook(Handle event, const char[] name, bool dontBroadcast) {
+public void CleanQDBHook(Handle event, const char[] name, bool dontBroadcast) {
     Echo(2, "CleanQDBHook: %s", name);
 
     int userid = GetEventInt(event, "userid");
@@ -1299,7 +1315,7 @@ void Unqueue(int client) {
     }
 }
 
-public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
+public void OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
     Echo(2, "OnSpawnHook: %s", name);
 
     int userid = GetEventInt(event, "userid");
@@ -1320,7 +1336,7 @@ public OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
                 if (zClass == 8) {
 
                     int j = 1;
-                    static i = 1;
+                    static int i = 1;
 
                     for (; i <= MaxClients + 1; i++) {
                         if (j++ == MaxClients + 1) {  // join 3 Tank requires +1
@@ -1374,7 +1390,7 @@ public Action TankAssistTimer(Handle timer, any client) {
     static const float nullOrigin[3];
     static times[MAXPLAYERS + 1] = {11, ...};
     static float origins[MAXPLAYERS + 1][3];
-    static i;
+    static int i;
 
     if (IsClientValid(client)) {
         i = times[client]--;
@@ -1407,7 +1423,7 @@ public Action ForceSpawnTimer(Handle timer, any client) {
     Echo(4, "ForceSpawnTimer: %d", client);
 
     static times[MAXPLAYERS + 1] = {20, ...};
-    static i;
+    static int i;
 
     if (IsClientValid(client)) {
         i = times[client]--;
@@ -1452,7 +1468,7 @@ public Action OnSpawnHookTimer(Handle timer, any target) {
     }
 }
 
-public OnDeathHook(Handle event, const char[] name, bool dontBroadcast) {
+public void OnDeathHook(Handle event, const char[] name, bool dontBroadcast) {
     Echo(4, "OnDeathHook: %s", name);
 
     int userid = GetEventInt(event, "userid");
@@ -1502,7 +1518,7 @@ public OnDeathHook(Handle event, const char[] name, bool dontBroadcast) {
     }
 }
 
-public QTeamHook(Handle event, const char[] name, bool dontBroadcast) {
+public void QTeamHook(Handle event, const char[] name, bool dontBroadcast) {
     Echo(2, "QTeamHook: %s", name);
 
     int userid = GetEventInt(event, "userid");
@@ -1541,7 +1557,7 @@ public Action QTeamHookTimer(Handle timer, any client) {
     }
 }
 
-public QAfkHook(Handle event, const char[] name, bool dontBroadcast) {
+public void QAfkHook(Handle event, const char[] name, bool dontBroadcast) {
     Echo(2, "QAfkHook: %s", name);
 
     int client = GetClientOfUserId(GetEventInt(event, "player"));
@@ -1568,7 +1584,7 @@ public QAfkHook(Handle event, const char[] name, bool dontBroadcast) {
     }
 }
 
-public QBakHook(Handle event, const char[] name, bool dontBroadcast) {
+public void QBakHook(Handle event, const char[] name, bool dontBroadcast) {
     Echo(2, "QBakHook: %s", name);
 
     int client = GetClientOfUserId(GetEventInt(event, "player"));
@@ -1905,9 +1921,9 @@ public Action TakeoverTimer(Handle timer, any client) {
         return Plugin_Handled;
     }
 
-    static team2;
-    static team3;
-    static teamX;
+    static int team2;
+    static int team3;
+    static int teamX;
 
     if (GetQRecord(client)) {
         if (GetClientTeam(client) >= 2) {
@@ -1986,10 +2002,10 @@ int GetClientManager(int target) {
     return result;
 }
 
-int GetNextBot(int onteam, int start=1, alive=false) {
+int GetNextBot(int onteam, int start=1, bool alive=false) {
     Echo(2, "GetNextBot: %d %d %d", onteam, start, alive);
 
-    static bot, j;
+    static int bot, j;
     bot = 0;
     j = start;
 
@@ -2095,7 +2111,7 @@ void SwitchTeam(int client, int onteam, char model[32]="") {
     }
 }
 
-public Action MkBotsCmd(int client, args) {
+public Action MkBotsCmd(int client, int args) {
     Echo(2, "MkBotsCmd: %d", client);
 
     switch(args) {
@@ -2135,7 +2151,7 @@ void MkBots(int asmany, int onteam) {
 public Action MkBotsTimer(Handle timer, Handle pack) {
     Echo(2, "MkBotsTimer");
 
-    static i;
+    static int i;
 
     ResetPack(pack);
     int asmany = ReadPackCell(pack);
@@ -2154,7 +2170,7 @@ public Action MkBotsTimer(Handle timer, Handle pack) {
     return Plugin_Stop;
 }
 
-public Action RmBotsCmd(int client, args) {
+public Action RmBotsCmd(int client, int args) {
     Echo(2, "RmBotsCmd: %d", client);
 
     int asmany;
@@ -2228,7 +2244,7 @@ void AutoModel(int client) {
     RequestFrame(_AutoModel, client);
 }
 
-public _AutoModel(int client) {
+public void _AutoModel(int client) {
     Echo(5, "_AutoModel: %d", client);
 
     if (IsClientValid(client, 2)) {
@@ -2285,7 +2301,7 @@ int GetSurvivorSet(int client) {
     return g_survivorSet;
 }
 
-void GetAllSurvivorModels(client=-1) {
+void GetAllSurvivorModels(int client=-1) {
     Echo(2, "GetAllSurvivorModels");
 
     static int index;
@@ -2648,7 +2664,7 @@ bool TakeoverZombieBotSig(int client, int target, bool si_ghost) {
 // PUBLIC INTERFACE AND MENU HANDLERS
 // ================================================================== //
 
-public Action TeleportClientCmd(int client, args) {
+public Action TeleportClientCmd(int client, int args) {
     Echo(2, "TeleportClientCmd: %d", client);
 
     int level;
@@ -2675,7 +2691,7 @@ public Action TeleportClientCmd(int client, args) {
     return Plugin_Handled;
 }
 
-public TeleportClientHandler(int client, int level) {
+public void TeleportClientHandler(int client, int level) {
     Echo(2, "TeleportClientHandler: %d %d", client, level);
 
     if (!RegMenuHandler(client, "TeleportClientHandler", level, 0)) {
@@ -2704,7 +2720,7 @@ public TeleportClientHandler(int client, int level) {
     }
 }
 
-public Action SwitchTeamCmd(int client, args) {
+public Action SwitchTeamCmd(int client, int args) {
     Echo(2, "SwitchTeamCmd: %d", client);
 
     int level;
@@ -2746,7 +2762,7 @@ public Action SwitchTeamCmd(int client, args) {
     return Plugin_Handled;
 }
 
-public SwitchTeamHandler(int client, int level) {
+public void SwitchTeamHandler(int client, int level) {
     Echo(2, "SwitchTeamHandler: %d %d", client, level);
 
     if (!RegMenuHandler(client, "SwitchTeamHandler", level, 0)) {
@@ -2776,7 +2792,7 @@ public SwitchTeamHandler(int client, int level) {
     }
 }
 
-public Action AssignModelCmd(int client, args) {
+public Action AssignModelCmd(int client, int args) {
     Echo(2, "AssignModelCmd: %d", client);
 
     int level;
@@ -2804,7 +2820,7 @@ public Action AssignModelCmd(int client, args) {
     return Plugin_Handled;
 }
 
-public AssignModelHandler(int client, int level) {
+public void AssignModelHandler(int client, int level) {
     Echo(2, "AssignModelHandler: %d %d", client, level);
 
     if (!RegMenuHandler(client, "AssignModelHandler", level, 0)) {
@@ -2833,7 +2849,7 @@ public AssignModelHandler(int client, int level) {
     }
 }
 
-public Action SwitchToBotCmd(int client, args) {
+public Action SwitchToBotCmd(int client, int args) {
     Echo(2, "SwitchToBotCmd: %d", client);
 
     int level;
@@ -2866,7 +2882,7 @@ public Action SwitchToBotCmd(int client, args) {
     return Plugin_Handled;
 }
 
-public SwitchToBotHandler(int client, int level) {
+public void SwitchToBotHandler(int client, int level) {
     Echo(2, "SwitchToBotHandler: %d %d", client, level);
 
     int homeTeam = ClientHomeTeam(client);
@@ -2903,7 +2919,7 @@ public SwitchToBotHandler(int client, int level) {
     }
 }
 
-public Action RespawnClientCmd(int client, args) {
+public Action RespawnClientCmd(int client, int args) {
     Echo(2, "RespawnClientCmd: %d", client);
 
     int level;
@@ -2931,7 +2947,7 @@ public Action RespawnClientCmd(int client, args) {
     return Plugin_Handled;
 }
 
-public RespawnClientHandler(int client, int level) {
+public void RespawnClientHandler(int client, int level) {
     Echo(2, "RespawnClientHandler: %d %d", client, level);
 
     if (!RegMenuHandler(client, "RespawnClientHandler", level, 0)) {
@@ -2960,7 +2976,7 @@ public RespawnClientHandler(int client, int level) {
     }
 }
 
-public Action CycleBotsCmd(int client, args) {
+public Action CycleBotsCmd(int client, int args) {
     Echo(2, "CycleBotsCmd: %d", client);
 
     int level;
@@ -2992,7 +3008,7 @@ public Action CycleBotsCmd(int client, args) {
     return Plugin_Handled;
 }
 
-public CycleBotsHandler(int client, int level) {
+public void CycleBotsHandler(int client, int level) {
     Echo(2, "CycleBotsHandler: %d %d", client, level);
 
     if (!RegMenuHandler(client, "CycleBotsHandler", level, 0)) {
@@ -3023,7 +3039,7 @@ public CycleBotsHandler(int client, int level) {
     }
 }
 
-public Action StripClientCmd(int client, args) {
+public Action StripClientCmd(int client, int args) {
     Echo(2, "StripClientCmd: %d", client);
 
     int target;
@@ -3058,7 +3074,7 @@ public Action StripClientCmd(int client, args) {
     return Plugin_Handled;
 }
 
-public StripClientHandler(int client, int level) {
+public void StripClientHandler(int client, int level) {
     Echo(2, "StripClientHandler: %d %d", client, level);
 
     if (!RegMenuHandler(client, "StripClientHandler", level, 0)) {
@@ -3087,7 +3103,7 @@ public StripClientHandler(int client, int level) {
     }
 }
 
-public Action ResetCmd(int client, args) {
+public Action ResetCmd(int client, int args) {
     Echo(2, "ResetCmd: %d", client);
 
     for (int i = 1; i <= MaxClients; i++) {
@@ -3110,7 +3126,7 @@ bool RegMenuHandler(int client, char [] handler, int level, int clearance=0) {
     return true;
 }
 
-public Action MainMenuCmd(int client, args) {
+public Action MainMenuCmd(int client, int args) {
     Echo(2, "MainMenuCmd: %d", client);
 
     GenericMenuCleaner(client);
@@ -3118,7 +3134,7 @@ public Action MainMenuCmd(int client, args) {
     return Plugin_Handled;
 }
 
-public MainMenuHandler(int client, int level) {
+public void MainMenuHandler(int client, int level) {
     Echo(2, "MainMenuHandler: %d %d", client, level);
 
     if (!RegMenuHandler(client, "MainMenuHandler", level, 0)) {
@@ -3167,7 +3183,7 @@ void GenericMenuCleaner(int client, bool clearStack=true) {
     }
 }
 
-public GenericMenuHandler(Menu menu, MenuAction action, int param1, int param2) {
+public int GenericMenuHandler(Menu menu, MenuAction action, int param1, int param2) {
     Echo(2, "GenericMenuHandler: %d %d", param1, param2);
 
     int client = param1;
@@ -3449,7 +3465,7 @@ void Echo(int level, char [] format, any ...) {
     }
 }
 
-void QDBCheckCmd(client) {
+void QDBCheckCmd(int client) {
     Echo(2, "QDBCheckCmd");
 
     PrintToConsole(client, "-- STAT: QDB Size is %d", g_QDB.Size);
@@ -3479,7 +3495,7 @@ void QDBCheckCmd(client) {
     }
 }
 
-public Action QuickClientPrintCmd(int client, args) {
+public Action QuickClientPrintCmd(int client, int args) {
     Echo(2, "QuickClientPrintCmd: %d", client);
 
     int onteam;
