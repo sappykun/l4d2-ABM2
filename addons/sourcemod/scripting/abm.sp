@@ -518,33 +518,17 @@ public Action ADTimer(Handle timer) {
     if (g_ADFreeze) {
         g_ADInterval = 0;
 
-        for (int i = 1; i <= MaxClients; i++) {
-            if (IsClientValid(GetRealClient(i), 2, 1)) {
-//             if (IsClientConnected(i) && IsClientInGame(i)) {
-//
-//                 if (IsFakeClient(i)) {
-//                     continue;
-//                 }
-
-                if (survivors < playQuota) {
-                    while (CountTeamMates(2) < playQuota) {
-                        AddSurvivor();
-                    }
-
-                    return Plugin_Continue;
-                }
-
-                else if (survivors > playQuota) {
-                    RmBots(1, 2);
-                }
-
-                if (AllClientsLoadedIn() && StartAD(5.0)) {
-                    RmBots(playQuota * -1, 2);
-                    g_ADFreeze = false;
-                }
-
-                break;
+        if (survivors < playQuota) {
+            while (CountTeamMates(2) < playQuota) {
+                AddSurvivor();
             }
+
+            return Plugin_Continue;
+        }
+
+        if (AllClientsLoadedIn() && StartAD(5.0)) {
+            RmBots(playQuota * -1, 2);
+            g_ADFreeze = false;
         }
     }
 
