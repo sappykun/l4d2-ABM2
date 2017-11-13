@@ -1,4 +1,8 @@
 # ABM Change Log
+## [0.1.95] - 2017-13-11
+### Fixed
+- Check for m_humanSpectatorUserID before using it
+
 ## [0.1.94] - 2017-27-10
 ### Changed
 - Adding/Removing extra survivor bots on round is smoother

@@ -29,7 +29,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.94"
+#define PLUGIN_VERSION "0.1.95"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -2503,9 +2503,11 @@ void ResetClientSpecUserId(int client, int target) {
 
     for (int i = 1; i <= MaxClients; i++) {
         if (IsClientValid(i, 2, 0)) {
-            spec = GetEntProp(i, Prop_Send, "m_humanSpectatorUserID");
-            if (userid == spec && i != target) {
-                SetEntProp(i, Prop_Send, "m_humanSpectatorUserID", 0);
+            if (HasEntProp(i, Prop_Send, "m_humanSpectatorUserID")) {
+                spec = GetEntProp(i, Prop_Send, "m_humanSpectatorUserID");
+                if (userid == spec && i != target) {
+                    SetEntProp(i, Prop_Send, "m_humanSpectatorUserID", 0);
+                }
             }
         }
     }
