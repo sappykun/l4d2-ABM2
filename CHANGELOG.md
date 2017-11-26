@@ -1,4 +1,11 @@
 # ABM Change Log
+## [0.1.96] - 2017-26-11
+### Fixed
+- SI not randomized under human control and all request ignored
+
+### Added
+- ABM join now wraps jointeam console commands (try to prevent extra bots)
+
 ## [0.1.95] - 2017-13-11
 ### Fixed
 - Check for m_humanSpectatorUserID before using it

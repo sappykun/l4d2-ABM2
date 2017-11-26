@@ -194,7 +194,7 @@ When set to 0 this will be turned off. When set to 1 (for survivors) or 2 (for i
 The Assistant Director (ADTimer) is fired every 5 seconds. When abm_spawninterval is met a full wave (in non-competitive modes) spawns in. When half this value is met, half the SI will spawn in. See abm_autohard for more details.
 
 #### abm_tankchunkhp (default 2500)
-Tank's health multiplied per survivor. Setting this to 0 will turn this enhancement off. This cvar also depends on abm_autohard being greater than or equal to 1. If abm_autohard is set to 1, Tank's health is only modified when the surviving team size is greater than 4. If abm_autohard is set to 2, Tank's health will always be modified based on this value.
+Tank's health multiplied per survivor. Setting this to 0 will turn this enhancement off. This cvar also depends on abm_autohard being greater than or equal to 1. If abm_autohard is set to 1, Tank's health is only modified when the surviving team size is greater than 4. If abm_autohard is set to 2, Tank's health will always be modified based on this value. Important to note is 2500 is based on Normal difficulty. This is cut in half on easy, multiplied 1.5x on Advance and multiplied by 2x on Expert.
 
 #### abm_teamlimit (default 16)
 This sets a limit of humans allowed on any given playable team. Only new players joining the server will automatically get moved to spectator if the humans on team have already met this limit. If you're having a match that requires teams be of a certain size, setting this will move those extra players onto spectator.

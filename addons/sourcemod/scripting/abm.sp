@@ -29,7 +29,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.95"
+#define PLUGIN_VERSION "0.1.96"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -228,11 +228,22 @@ public void OnPluginStart() {
         SetQRecord(i, true);
     }
 
+    AddCommandListener(JointeamIntercept, "jointeam");
     AddCommandListener(CmdIntercept, "z_spawn");
     AddCommandListener(CmdIntercept, "z_spawn_old");
     AddCommandListener(CmdIntercept, "z_add");
     AutoExecConfig(true, "abm");
     StartAD();
+}
+
+public Action JointeamIntercept(int client, const char[] cmd, int args) {
+    Echo(2, "JointeamIntercept: %d %s %d", client, cmd, args);
+
+    if (IsClientValid(client) && GetCmdArg(0, g_sB, sizeof(g_sB))) {
+        SwitchTeam(client, StringToInt(g_sB));
+    }
+
+    return Plugin_Handled;
 }
 
 void SetupCvar(Handle &cvHandle, char[] name, char[] value, char[] details) {
@@ -914,7 +925,7 @@ public void OnClientPostAdminCheck(int client) {
         if (g_JoinMenu == 2 || g_JoinMenu == 1 && IsAdmin(client)) {
             GoIdle(client, 1);
             menuArg0 = client;
-            SwitchTeamHandler(client, 1);
+            SwitchTeamHandler(client, 1, "");
         }
 
         else if (CountTeamMates(2) >= 1) {
@@ -2062,6 +2073,7 @@ void SwitchTeam(int client, int onteam, char model[32]="") {
                         GoIdle(client, 1);
                     }
 
+                    g_QRecord.SetString("model", model, true);
                     g_QRecord.SetValue("queued", true, true);
                     g_QRecord.SetValue("onteam", onteam, true);
 
@@ -2075,11 +2087,7 @@ void SwitchTeam(int client, int onteam, char model[32]="") {
                             return;
                         }
 
-                        switch (g_model[0] != EOS) {
-                            case 1: Format(model, sizeof(model), "%s", g_model);
-                            case 0: CleanSIName(model);
-                        }
-
+                        CleanSIName(model);
                         QueueUp(client, 3);
                         AddInfected(model, 1);
                         return;
@@ -2735,18 +2743,16 @@ public Action SwitchTeamCmd(int client, int args) {
         level = 1;
     }
 
-    if (menuArg1 == 3 && GetQRecord(menuArg0)) {
-        CleanSIName(model);
-        g_QRecord.SetString("model", model, true);
-        Echo(1, "--7: %N is model '%s'", menuArg0, model);
+    if (menuArg1 != 3) {
+        model = "";
     }
 
-    SwitchTeamHandler(client, level);
+    SwitchTeamHandler(client, level, model);
     return Plugin_Handled;
 }
 
-public void SwitchTeamHandler(int client, int level) {
-    Echo(2, "SwitchTeamHandler: %d %d", client, level);
+public void SwitchTeamHandler(int client, int level, char model[32]) {
+    Echo(2, "SwitchTeamHandler: %d %d %s", client, level, model);
 
     if (!RegMenuHandler(client, "SwitchTeamHandler", level, 0)) {
         return;
@@ -2767,7 +2773,7 @@ public void SwitchTeamHandler(int client, int level) {
                     return;
                 }
 
-                SwitchTeam(menuArg0, menuArg1);
+                SwitchTeam(menuArg0, menuArg1, model);
             }
 
             GenericMenuCleaner(client);
