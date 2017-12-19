@@ -29,7 +29,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.96"
+#define PLUGIN_VERSION "0.1.97"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -77,8 +77,10 @@ bool g_queued, g_tmpQueued;         // g_QDB client's takeover state
 bool g_inspec, g_tmpInspec;         // g_QDB check client's specator mode
 bool g_status, g_tmpStatus;         // g_QDB client life state
 bool g_update, g_tmpUpdate;         // g_QDB should we update this record?
-char g_model[64], g_tmpModel[64];   // g_QDB client's model
+char g_model[32], g_tmpModel[32];   // g_QDB client's model
+char g_ghost[32], g_tmpGhost[32];   // g_QDB queued model for SwitchTeam
 float g_origin[3], g_tmpOrigin[3];  // g_QDB client's origin vector
+float g_rdelay, g_tmpRdelay;        // g_QDB delay time for SI respawn
 int g_models[8];
 
 Handle g_ADAssistant;               // Tries to make sure the AD starts
@@ -113,6 +115,7 @@ ConVar g_cvAutoModel; int g_AutoModel;                      // abm_automodel
 ConVar g_cvKeepDead; int g_KeepDead;                        // abm_keepdead
 ConVar g_cvIdentityFix; int g_IdentityFix;                  // abm_identityfix
 ConVar g_cvZoey; int g_Zoey;                                // abm_zoey
+ConVar g_cvRespawnDelay; float g_RespawnDelay;              // abm_respawndelay
 ConVar g_cvMaxSI; int g_MaxSI;                              // z_max_player_zombies
 
 ConVar g_cvTankHealth;
@@ -217,6 +220,7 @@ public void OnPluginStart() {
     SetupCvar(g_cvKeepDead, "abm_keepdead", "0", "0: The dead return alive 1: the dead return dead");
     SetupCvar(g_cvIdentityFix, "abm_identityfix", "1", "0: Do not assign identities 1: Assign identities");
     SetupCvar(g_cvZoey, "abm_zoey", zoeyId, "0:Nick 1:Rochelle 2:Coach 3:Ellis 4:Bill 5:Zoey 6:Francis 7:Louis");
+    SetupCvar(g_cvRespawnDelay, "abm_respawndelay", "1.0", "SI respawn delay time in non-competitive modes");
 
     // clean out client menu stacks
     for (int i = 1; i <= MaxClients; i++) {
@@ -440,8 +444,13 @@ public void OnAllSpawnHook(Handle event, const char[] name, bool dontBroadcast) 
     int userid = GetEventInt(event, "userid");
     int client = GetClientOfUserId(userid);
 
-    if (IsClientValid(client)) {
+    if (GetQRtmp(client)) {
         CreateTimer(0.5, LifeCheckTimer, client);
+
+        if (g_tmpOnteam == 3 && !g_tmpStatus) {
+            g_QRtmp.SetValue("status", 1, true);
+            State_TransitionSig(client, 8);
+        }
     }
 }
 
@@ -558,7 +567,7 @@ public Action ADTimer(Handle timer) {
             if (!g_IsVs && g_tmpOnteam == 3) {
                 g_AssistedSpawning = true;
 
-                if (GetClientTeam(i) <= 1) {
+                if (!g_tmpInspec && GetClientTeam(i) <= 1) {
                     QueueUp(i, 3);
                     SwitchTeam(i, 3);
                 }
@@ -691,6 +700,19 @@ public void UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] ne
 
         else if (name[4] == 'p' && StrEqual(name, "abm_primaryweapon")) {
             GetConVarString(g_cvPrimaryWeapon, g_PrimaryWeapon, sizeof(g_PrimaryWeapon));
+        }
+
+        else if (name[4] == 'r' && StrEqual(name, "abm_respawndelay")) {
+            g_RespawnDelay = GetConVarFloat(g_cvRespawnDelay);
+
+            StringMapSnapshot keys = g_QDB.Snapshot();
+            for (int i; i < keys.Length; i++) {
+                keys.GetKey(i, g_sB, sizeof(g_sB));
+                g_QDB.GetValue(g_sB, g_QRecord);
+                g_QRecord.SetValue("rdelay", g_RespawnDelay, true);
+            }
+
+            delete keys;
         }
 
         else if (name[4] == 's') {
@@ -1170,6 +1192,8 @@ bool GetQRtmp(int client) {
             g_QRtmp.GetValue("inspec", g_tmpInspec);
             g_QRtmp.GetValue("status", g_tmpStatus);
             g_QRtmp.GetValue("update", g_tmpUpdate);
+            g_QRtmp.GetValue("rdelay", g_tmpRdelay);
+            g_QRtmp.GetString("ghost", g_tmpGhost, sizeof(g_tmpGhost));
             g_QRtmp.GetString("model", g_tmpModel, sizeof(g_tmpModel));
 
             if (g_tmpModel[0] == EOS || g_tmpOnteam == 3) {
@@ -1205,6 +1229,8 @@ bool GetQRecord(int client) {
             g_QRecord.GetValue("inspec", g_inspec);
             g_QRecord.GetValue("status", g_status);
             g_QRecord.GetValue("update", g_update);
+            g_QRecord.GetValue("rdelay", g_rdelay);
+            g_QRecord.GetString("ghost", g_ghost, sizeof(g_ghost));
             g_QRecord.GetString("model", g_model, sizeof(g_model));
 
             if (g_model[0] == EOS || g_onteam == 3) {
@@ -1235,6 +1261,8 @@ bool NewQRecord(int client) {
     g_QRecord.SetValue("inspec", false, true);
     g_QRecord.SetValue("status", true, true);
     g_QRecord.SetValue("update", false, true);
+    g_QRecord.SetValue("rdelay", g_RespawnDelay, true);
+    g_QRecord.SetString("ghost", "", true);
     g_QRecord.SetString("model", "", true);
     return true;
 }
@@ -1307,7 +1335,7 @@ void Unqueue(int client) {
     }
 }
 
-public void OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
+public Action OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
     Echo(2, "OnSpawnHook: %s", name);
 
     int userid = GetEventInt(event, "userid");
@@ -1315,7 +1343,7 @@ public void OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 
     GetClientName(target, g_pN, sizeof(g_pN));
     if (g_pN[0] == 'A' && StrContains(g_pN, "ABMclient") >= 0) {
-        return;
+        return Plugin_Handled;
     }
 
     int onteam = GetClientTeam(target);
@@ -1332,7 +1360,7 @@ public void OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 
                     for (; i <= MaxClients + 1; i++) {
                         if (j++ == MaxClients + 1) {  // join 3 Tank requires +1
-                            return;
+                            return Plugin_Handled;
                         }
 
                         if (i > MaxClients) {
@@ -1357,7 +1385,7 @@ public void OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 
             if (g_iQueue.Length > 0) {
                 SwitchToBot(g_iQueue.Get(0), target);
-                return;
+                return Plugin_Handled;
             }
         }
     }
@@ -1365,7 +1393,10 @@ public void OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
     if (onteam == 2) {
         // AutoModeling now takes place in OnEntityCreated
         CreateTimer(0.4, OnSpawnHookTimer, target);
+        return Plugin_Handled;
     }
+
+    return Plugin_Continue;
 }
 
 public Action TankAssistTimer(Handle timer, any client) {
@@ -2087,9 +2118,8 @@ void SwitchTeam(int client, int onteam, char model[32]="") {
                             return;
                         }
 
-                        CleanSIName(model);
-                        QueueUp(client, 3);
-                        AddInfected(model, 1);
+                        g_QRecord.SetString("ghost", model, true);
+                        CreateTimer(g_rdelay, RespawnTimer, client);
                         return;
                     }
 
@@ -2097,6 +2127,16 @@ void SwitchTeam(int client, int onteam, char model[32]="") {
                 }
             }
         }
+    }
+}
+
+public Action RespawnTimer(Handle Timer, int client) {
+    if (GetQRecord(client)) {
+        CleanSIName(g_ghost);
+        QueueUp(client, 3);
+        AddInfected(g_ghost, 1);
+        g_QRecord.SetValue("rdelay", g_RespawnDelay, true);
+        g_QRecord.SetString("ghost", "", true);
     }
 }
 
@@ -2407,7 +2447,7 @@ bool IsClientsModel(int client, char [] name) {
     return StrEqual(name, g_sB);
 }
 
-void GetBotCharacter(int client, char strBuffer[64]) {
+void GetBotCharacter(int client, char strBuffer[32]) {
     Echo(2, "GetBotCharacter: %d", client);
 
     if (IsClientValid(client)) {
@@ -2420,7 +2460,7 @@ void GetBotCharacter(int client, char strBuffer[64]) {
     }
 }
 
-void GetSurvivorCharacter(int client, char strBuffer[64]) {
+void GetSurvivorCharacter(int client, char strBuffer[32]) {
     Echo(2, "GetSurvivorCharacter: %d %s", client, strBuffer);
 
     GetEntPropString(client, Prop_Data, "m_ModelName", g_sB, sizeof(g_sB));
@@ -2432,7 +2472,7 @@ void GetSurvivorCharacter(int client, char strBuffer[64]) {
     }
 }
 
-void GetInfectedCharacter(int client, char strBuffer[64]) {
+void GetInfectedCharacter(int client, char strBuffer[32]) {
     Echo(2, "GetInfectedCharacter: %d %s", client, strBuffer);
 
     switch (GetEntProp(client, Prop_Send, "m_zombieClass")) {
@@ -2771,6 +2811,10 @@ public void SwitchTeamHandler(int client, int level, char model[32]) {
                 if (!IsAdmin(client) && menuArg1 == 3) {
                     GenericMenuCleaner(client);
                     return;
+                }
+
+                if (GetQRecord(menuArg0)) {
+                    g_QRecord.SetValue("rdelay", 0.1, true);
                 }
 
                 SwitchTeam(menuArg0, menuArg1, model);

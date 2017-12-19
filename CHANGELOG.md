@@ -1,4 +1,12 @@
 # ABM Change Log
+## [0.1.97] - 2017-18-12
+### Added
+- SI respawn delay in non-competitive modes (cvar abm_respawndelay def. 1.0)
+
+### Fixed
+- SI respawning to fast on instakills (thanks to Kot4404 for reporting)
+- Forcing spectators on SI team to join back in non-competitive modes
+
 ## [0.1.96] - 2017-26-11
 ### Fixed
 - SI not randomized under human control and all request ignored

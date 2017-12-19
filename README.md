@@ -153,6 +153,8 @@ Administrators can put anyone onto any team and into any bot using either menus 
  - ABM plugin version
 "abm_zoey" = "5"
  - 0:Nick 1:Rochelle 2:Coach 3:Ellis 4:Bill 5:Zoey 6:Francis 7:Louis
+"abm_respawndelay" = "1.0"
+ - SI respawn delay time for non-competitive modes
 ```
 
 ### Extending Configurations
@@ -222,6 +224,9 @@ New survivor bots are created for new players and some people that may die may l
 
 #### abm_stripkick (default 0)
 This will not strip leaving survivors of their inventory and all of their items will drop to the floor where they leave the game. Turning this to 1 will strip leaving survivors of all of their inventory and nothing will drop.
+
+#### abm_respawndelay (default 1.0)
+Controls how quickly a human player on the SI team in non-competitive modes respawn back into the game after death. Setting this to an extremely low value may cause glitches with SI and instakills (thanks to kot4404 for reporting this). This cvar is bypassed when executing ```!join 3``` from a console.
 
 
 ## How-to
