@@ -1,4 +1,11 @@
 # ABM Change Log
+## [0.1.97a] - 2017-18-12
+### Fixed
+- Jointeam wrap now off by default (see _abm_wrapswitch cvar)
+- Jointeam wrap now works in versus
+- Jointeam wrap allowing anyone to join infected in any mode
+- _abm_wrapswitch is an experimental cvar that'll toggle jointeam wrapping
+
 ## [0.1.97] - 2017-18-12
 ### Added
 - SI respawn delay in non-competitive modes (cvar abm_respawndelay def. 1.0)

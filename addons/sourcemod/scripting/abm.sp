@@ -29,7 +29,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.97"
+#define PLUGIN_VERSION "0.1.97a"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -92,6 +92,7 @@ bool g_IsVs;
 bool g_IsCoop;
 bool g_AssistedSpawning = false;
 bool g_ADFreeze = true;
+bool g_AutoWave;
 int g_ADInterval;
 
 ConVar g_cvVersion;                                         // abm_version
@@ -116,6 +117,7 @@ ConVar g_cvKeepDead; int g_KeepDead;                        // abm_keepdead
 ConVar g_cvIdentityFix; int g_IdentityFix;                  // abm_identityfix
 ConVar g_cvZoey; int g_Zoey;                                // abm_zoey
 ConVar g_cvRespawnDelay; float g_RespawnDelay;              // abm_respawndelay
+ConVar g_cvWrapSwitch; int g_WrapSwitch;                    // _abm_wrapswitch
 ConVar g_cvMaxSI; int g_MaxSI;                              // z_max_player_zombies
 
 ConVar g_cvTankHealth;
@@ -221,6 +223,7 @@ public void OnPluginStart() {
     SetupCvar(g_cvIdentityFix, "abm_identityfix", "1", "0: Do not assign identities 1: Assign identities");
     SetupCvar(g_cvZoey, "abm_zoey", zoeyId, "0:Nick 1:Rochelle 2:Coach 3:Ellis 4:Bill 5:Zoey 6:Francis 7:Louis");
     SetupCvar(g_cvRespawnDelay, "abm_respawndelay", "1.0", "SI respawn delay time in non-competitive modes");
+    SetupCvar(g_cvWrapSwitch, "_abm_wrapswitch", "0", "Have ABM intercept jointeam command");
 
     // clean out client menu stacks
     for (int i = 1; i <= MaxClients; i++) {
@@ -232,7 +235,7 @@ public void OnPluginStart() {
         SetQRecord(i, true);
     }
 
-    AddCommandListener(JointeamIntercept, "jointeam");
+    AddCommandListener(TeamSwitchIntercept, "jointeam");
     AddCommandListener(CmdIntercept, "z_spawn");
     AddCommandListener(CmdIntercept, "z_spawn_old");
     AddCommandListener(CmdIntercept, "z_add");
@@ -240,14 +243,36 @@ public void OnPluginStart() {
     StartAD();
 }
 
-public Action JointeamIntercept(int client, const char[] cmd, int args) {
-    Echo(2, "JointeamIntercept: %d %s %d", client, cmd, args);
+public Action TeamSwitchIntercept(int client, const char[] cmd, int args) {
+    Echo(2, "TeamSwitchIntercept: %d %s %d", client, cmd, args);
 
-    if (IsClientValid(client) && GetCmdArg(0, g_sB, sizeof(g_sB))) {
-        SwitchTeam(client, StringToInt(g_sB));
+    if (g_WrapSwitch) {
+        GetCmdArg(1, g_sB, sizeof(g_sB));
+
+        if (IsClientValid(client)) {
+            if (StrEqual(g_sB, "survivor", false) || StrEqual(g_sB, "2")) {
+                SwitchTeam(client, 2);
+            }
+
+            else if (StrEqual(g_sB, "infected", false) || StrEqual(g_sB, "3")) {
+                if (g_IsVs || IsAdmin(client)) {
+                    SwitchTeam(client, 3);
+                }
+            }
+
+            else if (StrEqual(g_sB, "0") || StrEqual(g_sB, "1")) {
+                SwitchTeam(client, StringToInt(g_sB));
+            }
+
+            else {
+                SwitchTeamCmd(client, 0);
+            }
+
+            return Plugin_Handled;
+        }
     }
 
-    return Plugin_Handled;
+    return Plugin_Continue;
 }
 
 void SetupCvar(Handle &cvHandle, char[] name, char[] value, char[] details) {
@@ -342,7 +367,7 @@ public Action L4D_OnGetScriptValueInt(const char[] key, int &retVal) {
 
     // see UpdateConVarsHook "g_UnlockSI" for VScript Director Options Unlocker
 
-    if (g_UnlockSI == 1) {
+    if (g_UnlockSI == 1 && g_MaxSI > 4) {
         int val = retVal;
 
         if (StrEqual(key, "MaxSpecials")) val = g_MaxSI;
@@ -540,7 +565,7 @@ public Action ADTimer(Handle timer) {
         if (g_ADFreeze) {
             g_ADInterval = 0;
 
-            if (CountTeamMates(2) >= 4 || AllClientsLoadedIn()) {
+            if (survivors >= 4 || AllClientsLoadedIn()) {
                 while (CountTeamMates(2) < playQuota) {
                     AddSurvivor();
                 }
@@ -583,9 +608,11 @@ public Action ADTimer(Handle timer) {
     }
 
     static int lastSize;
-    bool autoWave;
+    g_AutoWave  = false;
 
     if (g_IsCoop) {
+        g_AutoWave = (g_AutoHard == 2 || survivors > 4 && g_AutoHard == 1);
+
         if (lastSize != survivors) {
             lastSize = survivors;
             AutoSetTankHp();
@@ -593,15 +620,7 @@ public Action ADTimer(Handle timer) {
         }
     }
 
-    // Auto difficulty here will not spawn SI in competitive modes.
-    // SI are unlocked (without spawn) see L4D_OnGetScriptValueInt.
-
-    switch (g_IsVs) {
-        case 1: autoWave = false;
-        case 0: autoWave = g_AutoHard == 2 || survivors > 4 && g_AutoHard == 1;
-    }
-
-    if (autoWave || g_AssistedSpawning) {
+    if (g_AutoWave || g_AssistedSpawning) {
         if (g_SpawnInterval > 0) {
             if (g_ADInterval >= g_SpawnInterval) {
                 if (g_ADInterval % g_SpawnInterval == 0) {
@@ -756,6 +775,10 @@ public void UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] ne
 
     else if (name[0] == 'm' && StrEqual(name, "mp_gamemode")) {
         UpdateGameMode();
+    }
+
+    else if (name[5] == 'w' && StrEqual(name, "_abm_wrapswitch")) {
+        g_WrapSwitch = GetConVarInt(g_cvWrapSwitch);
     }
 }
 
