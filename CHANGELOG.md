@@ -1,4 +1,8 @@
 # ABM Change Log
+## [0.1.97b] - 2017-18-12
+###
+- Switching in Vs between teams spawning dead survivors when 3 or more on server
+
 ## [0.1.97a] - 2017-18-12
 ### Fixed
 - Jointeam wrap now off by default (see _abm_wrapswitch cvar)

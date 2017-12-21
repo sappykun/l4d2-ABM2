@@ -29,7 +29,7 @@ Free Software Foundation, Inc.
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.97a"
+#define PLUGIN_VERSION "0.1.97b"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -589,8 +589,10 @@ public Action ADTimer(Handle timer) {
             //    ResetClientSpecUserId(i, g_tmpTarget);
             //}
 
-            if (!g_IsVs && g_tmpOnteam == 3) {
-                g_AssistedSpawning = true;
+            if (g_tmpOnteam == 3) {
+                if (!g_IsVs) {
+                    g_AssistedSpawning = true;
+                }
 
                 if (!g_tmpInspec && GetClientTeam(i) <= 1) {
                     QueueUp(i, 3);
@@ -2831,7 +2833,7 @@ public void SwitchTeamHandler(int client, int level, char model[32]) {
 
         case 2: {
             if (CanClientTarget(client, menuArg0)) {
-                if (!IsAdmin(client) && menuArg1 == 3) {
+                if (!g_IsVs && !IsAdmin(client) && menuArg1 == 3) {
                     GenericMenuCleaner(client);
                     return;
                 }
