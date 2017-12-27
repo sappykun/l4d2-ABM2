@@ -30,7 +30,7 @@ Free Software Foundation, Inc.
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "0.1.97c"
+#define PLUGIN_VERSION "0.1.97d"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -592,7 +592,7 @@ public Action ADTimer(Handle timer) {
     static bool takeover;
     takeover = !g_IsVs || (g_IsVs && !g_ADFreeze);
     playQuota = g_MinPlayers + g_ExtraPlayers;
-    g_AssistedSpawning = false;
+    //g_AssistedSpawning = false;
 
     for (int i = 1; i <= MaxClients; i++) {
         if (g_ADFreeze) {
@@ -643,7 +643,6 @@ public Action ADTimer(Handle timer) {
     }
 
     static int lastSize;
-    g_AutoWave  = false;
 
     if (lastSize != g_MaxMates) {
         lastSize  = g_MaxMates;
@@ -654,6 +653,7 @@ public Action ADTimer(Handle timer) {
         }
 
         VDOUnlocker();
+        g_AutoWave = false;
 
         if (g_IsCoop) {
             g_AutoWave = (g_AutoHard == 2 || g_MaxMates > 4 && g_AutoHard == 1);
@@ -662,17 +662,20 @@ public Action ADTimer(Handle timer) {
     }
 
     if (g_AutoWave || g_AssistedSpawning) {
-        if (g_SpawnInterval > 0) {
-            if (g_ADInterval >= g_SpawnInterval) {
-                if (g_ADInterval % g_SpawnInterval == 0) {
-                    Echo(2, " -- Assisting SI %d: Matching Full Team", g_ADInterval);
-                    MkBots(g_MaxMates * -1, 3);
-                }
+        if (g_SpawnInterval > 0 && g_ADInterval >= g_SpawnInterval) {
+            if (g_ADInterval % g_SpawnInterval == 0) {
+                Echo(2, " -- Assisting SI %d: Matching Full Team", g_ADInterval);
+                MkBots(g_MaxMates * -1, 3);
+            }
 
-                else if (g_ADInterval % (g_SpawnInterval / 2) == 0) {
-                    Echo(2, " -- Assisting SI %d: Matching Half Team", g_ADInterval);
-                    MkBots((g_MaxMates / 2) * -1, 3);
-                }
+            else if (g_ADInterval % (g_SpawnInterval / 2) == 0) {
+                Echo(2, " -- Assisting SI %d: Matching Half Team", g_ADInterval);
+                MkBots((g_MaxMates / 2) * -1, 3);
+            }
+
+            else if (g_ADInterval % (g_SpawnInterval / 3) == 0) {
+                Echo(2, " -- Assisting SI %d: Matching a Quarter", g_ADInterval);
+                MkBots((g_MaxMates / 4) * -1, 3);
             }
         }
     }

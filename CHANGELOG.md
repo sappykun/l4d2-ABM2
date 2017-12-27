@@ -1,4 +1,14 @@
 # ABM Change Log
+## [0.1.97d] - 2017-27-12
+### Fixed 
+- g_AutoWave turning off prematurely
+
+### Changed
+- g_AssistedSpawning staying on until end of round
+
+### Added
+- SI waves now spawn a quarter size every (abm_spawninterval / 3)
+
 ## [0.1.97c] - 2017-27-12
 ### Changed
 - pragma newdecls required permanently enabled
