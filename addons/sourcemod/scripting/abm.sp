@@ -24,12 +24,13 @@ Free Software Foundation, Inc.
 #include <sourcemod>
 #include <sdktools>
 #include <sdkhooks>
-#pragma semicolon 1
-//#pragma newdecls required
 #undef REQUIRE_EXTENSIONS
 #include <left4downtown>
 
-#define PLUGIN_VERSION "0.1.97b"
+#pragma semicolon 1
+#pragma newdecls required
+
+#define PLUGIN_VERSION "0.1.97c"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -118,15 +119,19 @@ ConVar g_cvIdentityFix; int g_IdentityFix;                  // abm_identityfix
 ConVar g_cvZoey; int g_Zoey;                                // abm_zoey
 ConVar g_cvRespawnDelay; float g_RespawnDelay;              // abm_respawndelay
 ConVar g_cvWrapSwitch; int g_WrapSwitch;                    // _abm_wrapswitch
-ConVar g_cvMaxSI; int g_MaxSI;                              // z_max_player_zombies
+ConVar g_cvMaxMinions;                                      // z_minion_limit
+ConVar g_cvMaxSurvivors;                                    // survivor_limit
+ConVar g_cvMaxInfecteds;                                    // z_max_player_zombies
+int g_MaxMates;                                             // X vs X
+int g_SILimits;
 
 ConVar g_cvTankHealth;
-ConVar g_cvDvarsHandle;
 ConVar g_cvMaxSwitches;
 ConVar g_cvGameMode;
-
-static char g_DvarsOriginStr[2048];  // will get lost to an sm plugins reload abm
-static bool g_DvarsCheck;
+ConVar g_cvVDOUHandle;
+ConVar g_cvVDOUOrigin;
+char g_VDOUCurVal[2048];
+char g_VDOUOrigin[2048];
 
 public Plugin myinfo= {
     name = "ABM",
@@ -190,19 +195,46 @@ public void OnPluginStart() {
         case 1: zoeyId = "1";  // Zoey crashes Windows servers, 1 is Rochelle
     }
 
+    // remember vscript director options unlocker settings between reloads
+    g_cvVDOUHandle = FindConVar("l4d2_directoroptions_overwrite");
+    SetupCvar(g_cvVDOUOrigin, "_abm_vdouorigin", ";", "DO NOT EDIT");
+
+    if (g_cvVDOUHandle != null) {
+        HookConVarChange(g_cvVDOUHandle, UpdateConVarsHook);
+        GetConVarString(g_cvVDOUOrigin, g_VDOUOrigin, sizeof(g_VDOUOrigin));
+        GetConVarString(g_cvVDOUHandle, g_sB, sizeof(g_sB));
+
+        switch (g_VDOUOrigin[0] != ';') {
+            case 1: UpdateConVarsHook(g_cvVDOUHandle, g_VDOUOrigin, g_VDOUOrigin);
+            case 0: UpdateConVarsHook(g_cvVDOUHandle, g_sB, g_sB);
+        }
+    }
+
     g_cvTankHealth = FindConVar("z_tank_health");
-    g_cvDvarsHandle = FindConVar("l4d2_directoroptions_overwrite");
     g_cvMaxSwitches = FindConVar("vs_max_team_switches");
     g_cvGameMode = FindConVar("mp_gamemode");
     HookConVarChange(g_cvGameMode, UpdateConVarsHook);
     UpdateGameMode();
 
-    g_cvMaxSI = FindConVar("z_max_player_zombies");
-    SetConVarBounds(g_cvMaxSI, ConVarBound_Lower, true, 1.0);
-    SetConVarBounds(g_cvMaxSI, ConVarBound_Upper, true, 24.0);
+    float maxClients = float(MaxClients);
+    g_cvMaxMinions = FindConVar("z_minion_limit");
+    SetConVarFloat(g_cvMaxMinions, maxClients);
+
+    g_cvMaxInfecteds = FindConVar("z_max_player_zombies");
+    SetConVarBounds(g_cvMaxInfecteds, ConVarBound_Upper, true, maxClients);
+    SetConVarFloat(g_cvMaxInfecteds, maxClients);
+
+    g_cvMaxSurvivors = FindConVar("survivor_limit");
+    SetConVarBounds(g_cvMaxSurvivors, ConVarBound_Upper, true, maxClients);
+    SetConVarFloat(g_cvMaxSurvivors, maxClients);
+
+    // thanks to bl4nk
+    int flags = GetConVarFlags(g_cvMaxSurvivors);
+    flags &= ~FCVAR_NOTIFY;
+    SetConVarFlags(g_cvMaxSurvivors, flags);
 
     SetupCvar(g_cvVersion, "abm_version", PLUGIN_VERSION, "ABM plugin version");
-    SetupCvar(g_cvLogLevel, "abm_loglevel", "0", "Development logging level 0: Off, 4: Max");
+    SetupCvar(g_cvLogLevel, "abm_loglevel", "-1", "Development logging level -1: Off, 6: Max");
     SetupCvar(g_cvMinPlayers, "abm_minplayers", "4", "Pruning extra survivors stops at this size");
     SetupCvar(g_cvPrimaryWeapon, "abm_primaryweapon", "shotgun_chrome", "5+ survivor primary weapon");
     SetupCvar(g_cvSecondaryWeapon,"abm_secondaryweapon", "baseball_bat", "5+ survivor secondary weapon");
@@ -223,7 +255,7 @@ public void OnPluginStart() {
     SetupCvar(g_cvIdentityFix, "abm_identityfix", "1", "0: Do not assign identities 1: Assign identities");
     SetupCvar(g_cvZoey, "abm_zoey", zoeyId, "0:Nick 1:Rochelle 2:Coach 3:Ellis 4:Bill 5:Zoey 6:Francis 7:Louis");
     SetupCvar(g_cvRespawnDelay, "abm_respawndelay", "1.0", "SI respawn delay time in non-competitive modes");
-    SetupCvar(g_cvWrapSwitch, "_abm_wrapswitch", "0", "Have ABM intercept jointeam command");
+    SetupCvar(g_cvWrapSwitch, "abm_wrapswitch", "0", "Intercept chooseteam/jointeam commands");
 
     // clean out client menu stacks
     for (int i = 1; i <= MaxClients; i++) {
@@ -367,16 +399,17 @@ public Action L4D_OnGetScriptValueInt(const char[] key, int &retVal) {
 
     // see UpdateConVarsHook "g_UnlockSI" for VScript Director Options Unlocker
 
-    if (g_UnlockSI == 1 && g_MaxSI > 4) {
+    if (g_UnlockSI == 1 && g_MaxMates > 4) {
         int val = retVal;
 
-        if (StrEqual(key, "MaxSpecials")) val = g_MaxSI;
-        else if (StrEqual(key, "BoomerLimit")) val = 4;
-        else if (StrEqual(key, "SmokerLimit")) val = 4;
-        else if (StrEqual(key, "HunterLimit")) val = 4;
-        else if (StrEqual(key, "ChargerLimit")) val = 4;
-        else if (StrEqual(key, "SpitterLimit")) val = 4;
-        else if (StrEqual(key, "JockeyLimit")) val = 4;
+        if (StrEqual(key, "DominatorLimit")) val = g_MaxMates;
+        else if (StrEqual(key, "MaxSpecials")) val = g_MaxMates;
+        else if (StrEqual(key, "BoomerLimit")) val = g_SILimits;
+        else if (StrEqual(key, "SmokerLimit")) val = g_SILimits;
+        else if (StrEqual(key, "HunterLimit")) val = g_SILimits;
+        else if (StrEqual(key, "ChargerLimit")) val = g_SILimits;
+        else if (StrEqual(key, "SpitterLimit")) val = g_SILimits;
+        else if (StrEqual(key, "JockeyLimit")) val = g_SILimits;
 
         if (val != retVal) {
             retVal = val;
@@ -549,10 +582,10 @@ bool AllClientsLoadedIn() {
 public Action ADTimer(Handle timer) {
     Echo(6, "ADTimer");
 
-    static int survivors, playQuota;
-    survivors = CountTeamMates(2);
+    static int playQuota;
+    g_MaxMates = CountTeamMates(2);
 
-    if (survivors == 0) {
+    if (g_MaxMates == 0) {
         return Plugin_Continue;
     }
 
@@ -565,7 +598,7 @@ public Action ADTimer(Handle timer) {
         if (g_ADFreeze) {
             g_ADInterval = 0;
 
-            if (survivors >= 4 || AllClientsLoadedIn()) {
+            if (g_MaxMates >= 4 || AllClientsLoadedIn()) {
                 while (CountTeamMates(2) < playQuota) {
                     AddSurvivor();
                 }
@@ -612,13 +645,19 @@ public Action ADTimer(Handle timer) {
     static int lastSize;
     g_AutoWave  = false;
 
-    if (g_IsCoop) {
-        g_AutoWave = (g_AutoHard == 2 || survivors > 4 && g_AutoHard == 1);
+    if (lastSize != g_MaxMates) {
+        lastSize  = g_MaxMates;
 
-        if (lastSize != survivors) {
-            lastSize = survivors;
+        g_SILimits = 1;
+        while (g_SILimits * 6 < g_MaxMates) {
+            g_SILimits++;
+        }
+
+        VDOUnlocker();
+
+        if (g_IsCoop) {
+            g_AutoWave = (g_AutoHard == 2 || g_MaxMates > 4 && g_AutoHard == 1);
             AutoSetTankHp();
-            RegulateSI();
         }
     }
 
@@ -627,12 +666,12 @@ public Action ADTimer(Handle timer) {
             if (g_ADInterval >= g_SpawnInterval) {
                 if (g_ADInterval % g_SpawnInterval == 0) {
                     Echo(2, " -- Assisting SI %d: Matching Full Team", g_ADInterval);
-                    MkBots(survivors * -1, 3);
+                    MkBots(g_MaxMates * -1, 3);
                 }
 
                 else if (g_ADInterval % (g_SpawnInterval / 2) == 0) {
                     Echo(2, " -- Assisting SI %d: Matching Half Team", g_ADInterval);
-                    MkBots((survivors / 2) * -1, 3);
+                    MkBots((g_MaxMates / 2) * -1, 3);
                 }
             }
         }
@@ -646,8 +685,8 @@ public void UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] ne
     GetConVarName(convar, g_sB, sizeof(g_sB));
     Echo(2, "UpdateConVarsHook: %s %s %s", g_sB, oldCv, newCv);
 
-    char name[32];
-    char value[32];
+    static char name[32]; name = "";
+    static char value[2048]; value = "";
 
     Format(name, sizeof(name), g_sB);
     Format(value, sizeof(value), "%s", newCv);
@@ -767,11 +806,24 @@ public void UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] ne
 
         else if (name[4] == 'u' && StrEqual(name, "abm_unlocksi")) {
             g_UnlockSI = GetConVarInt(g_cvUnlockSI);
-            RegulateSI();
+
+            switch (g_UnlockSI) {
+                case  2: VDOUnlocker();
+                default: RestoreVDOU();
+            }
         }
 
         else if (name[4] == 'z' && StrEqual(name, "abm_zoey")) {
             g_Zoey = GetConVarInt(g_cvZoey);
+        }
+    }
+
+    else if (name[0] == 'l' && StrEqual(name, "l4d2_directoroptions_overwrite")) {
+        g_VDOUCurVal = value;
+
+        if (g_UnlockSI != 2) {
+            g_VDOUOrigin = value;
+            SetConVarString(g_cvVDOUOrigin, value);
         }
     }
 
@@ -814,7 +866,7 @@ int GetGameType() {
             else if (StrEqual(g_sB, "mutation12")) return 1;  // Realism Versus
             else if (StrEqual(g_sB, "mutation13")) return 2;  // Follow the Liter
             else if (StrEqual(g_sB, "mutation14")) return 0;  // Gib Fest
-            else if (StrEqual(g_sB, "mutation15")) return 3;  // Versus Survival
+            else if (StrEqual(g_sB, "mutation15")) return 1;  // Versus Survival
             else if (StrEqual(g_sB, "mutation16")) return 0;  // Hunting Party
             else if (StrEqual(g_sB, "mutation17")) return 0;  // Lone Gunman
             else if (StrEqual(g_sB, "mutation18")) return 1;  // Bleed Out Versus
@@ -865,34 +917,54 @@ void UpdateGameMode() {
     }
 }
 
-void RegulateSI() {
-    Echo(2, "RegulateSI");
+void SetVDOU(char[] val, any ...) {
+    Echo(2, "SetVDOU");
 
-    static int lastSISize;
+    static const char tmp[128] = "\
+        DominatorLimit=%s;\
+        MaxSpecials=%s;\
+        BoomerLimit=%s;\
+        SmokerLimit=%s;\
+        HunterLimit=%s;\
+        ChargerLimit=%s;\
+        SpitterLimit=%s;\
+        JockeyLimit=%s;";
 
-    if (g_DvarsCheck && g_cvDvarsHandle != null) {
-        if (g_UnlockSI == 2 && g_MaxSI > 4) {
-            Format(g_sB, sizeof(g_sB), "MaxSpecials=%d;DominatorLimit=%d", g_MaxSI, g_MaxSI);
-            SetConVarString(g_cvDvarsHandle, g_sB);
+    VFormat(val, sizeof(tmp), tmp, 2);
+}
 
-            if (lastSISize != g_MaxSI) {
-                lastSISize = g_MaxSI;
-            }
+void VDOUnlocker() {
+    Echo(2, "VDOUnlocker");
+
+    static bool restore = false;
+
+    if (g_cvVDOUHandle != null) {
+        g_MaxMates = CountTeamMates(2);
+
+        if (g_UnlockSI == 2 && g_MaxMates > 4) {
+            static char m[3]; static char l[3];
+            Format(m, sizeof(m), "%d", g_MaxMates);
+            Format(l, sizeof(l), "%d", g_SILimits);
+            SetVDOU(g_sB, m, m, l, l, l, l, l, l);
+            SetConVarString(g_cvVDOUHandle, g_sB);
+            restore = true;
         }
 
-        else {
-            RestoreDvars();
-            lastSISize = 0;
+        else if (restore) {
+            RestoreVDOU();
+            restore = false;
         }
     }
 }
 
-void RestoreDvars() {
-    Echo(2, "RestoreDvars");
+void RestoreVDOU() {
+    Echo(2, "RestoreVDOU");
 
-    if (g_DvarsCheck && g_cvDvarsHandle != null) {
-        SetConVarString(g_cvDvarsHandle, g_DvarsOriginStr);
-    }
+    static char origin[2048];
+    origin = g_VDOUOrigin;
+    SetVDOU(g_sB, "","","","","","","","");
+    SetConVarString(g_cvVDOUHandle, g_sB);
+    SetConVarString(g_cvVDOUHandle, origin);
 }
 
 void AutoSetTankHp() {
@@ -915,21 +987,6 @@ void AutoSetTankHp() {
 
 public void OnConfigsExecuted() {
     Echo(2, "OnConfigsExecuted");
-
-    if (!g_DvarsCheck) {
-        g_DvarsCheck = true;
-
-        if (g_cvDvarsHandle != null) {
-            GetConVarString(g_cvDvarsHandle, g_DvarsOriginStr, sizeof(g_DvarsOriginStr));
-            RegulateSI();
-        }
-    }
-
-    /* TODO: look into also providing a simpler maintenance approach "abm_extend"?
-    l4d2_tank_arena,l4d2_tank_challenge_15_rounds,l4d2_tank_challenge_20_rounds,\
-    l4d2_tank_challenge_30_rounds,l4d2_tank_challenge,l4d2_tanksplayground_night,\
-    l4d2_tanksplayground,tankyard:abm_unlocksi=0,abm_spawninterval=0,\
-    abm_tankchunkhp=1000; */
 
     // extend the base cfg with a map specific cfg
     GetCurrentMap(g_sB, sizeof(g_sB));
@@ -1375,9 +1432,18 @@ public Action OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
     int client;
 
     if (onteam == 3) {
+        int zClass = GetEntProp(target, Prop_Send, "m_zombieClass");
+
+        if (g_UnlockSI != 0) {
+            if (CountTeamMates(3) > g_MaxMates && zClass != 8) {
+                if (IsFakeClient(target)) {
+                    KickClient(target);
+                }
+            }
+        }
+
         if (!g_IsVs) {
             if (g_AssistedSpawning) {
-                int zClass = GetEntProp(target, Prop_Send, "m_zombieClass");
                 if (zClass == 8) {
 
                     int j = 1;
@@ -2019,11 +2085,6 @@ int CountTeamMates(int onteam, int mtype=2) {
                 case 0: humans++;
             }
         }
-    }
-
-    if (onteam == 2 && clients > 0) {
-        g_MaxSI = clients;
-        SetConVarFloat(g_cvMaxSI, float(clients));
     }
 
     switch (mtype) {
@@ -3393,7 +3454,7 @@ void TeamsMenu(int client, char [] title, bool all=true) {
     }
 
     menu.AddItem("2", "Survivor");
-    if (IsAdmin(client)) {
+    if (g_IsVs || IsAdmin(client)) {
         menu.AddItem("3", "Infected");
     }
 

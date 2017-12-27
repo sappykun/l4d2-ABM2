@@ -1,6 +1,25 @@
 # ABM Change Log
+## [0.1.97c] - 2017-27-12
+### Changed
+- pragma newdecls required permanently enabled
+- Rewrite to VScript Director Options Unlocker remembering state between reloads
+- Increased survivor\_limit/z\_max\_player\_zombies up to MaxClients
+- Large numbers of SI should now spawn more evenly (X of each not 4 and 0, etc)
+- \_abm\_wrapswitch is now abm\_wrapswitch (wraps chooseteam/jointeam commands)
+- Unlocked SI limits are now dynamic based on team size
+- RegulateSI to VDOUnlocker (more descriptive to its purpose)
+- if abm\_unlocksi != 0, limit SI team to size of surviving team
+- abm\_loglevel defaults to -1
+- Use !join in Vs to switch sides
+
+### Fixed
+- Versus Survival is no longer recognized as Scavenge (thanks to kot4404)
+
+### Added
+- Opened a 
+
 ## [0.1.97b] - 2017-18-12
-###
+### Fixed
 - Switching in Vs between teams spawning dead survivors when 3 or more on server
 
 ## [0.1.97a] - 2017-18-12
