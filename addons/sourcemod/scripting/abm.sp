@@ -2705,6 +2705,8 @@ bool TakeoverBotSig(int client, int target) {
             SDKCall(hSwitch, client, true);
 
             Unqueue(client);
+            GetConVarString(g_cvGameMode, g_sB, sizeof(g_sB));
+            SendConVarValue(client, g_cvGameMode, g_sB);
             g_QRecord.SetValue("status", true, true);
             return true;
         }
@@ -2725,7 +2727,7 @@ bool TakeoverBotSig(int client, int target) {
 }
 
 bool TakeoverZombieBotSig(int client, int target, bool si_ghost) {
-    Echo(2, "TakeoverZombieBotSig: %d %d %d", client, target, si_ghost);
+    Echo(0, "TakeoverZombieBotSig: %d %d %d", client, target, si_ghost);
 
     if (!GetQRecord(client)) {
         return false;
@@ -2760,6 +2762,7 @@ bool TakeoverZombieBotSig(int client, int target, bool si_ghost) {
             }
 
             Unqueue(client);
+            SendConVarValue(client, g_cvGameMode, "versus");
             g_QRecord.SetValue("status", true, true);
             g_AssistedSpawning = true;
             return true;

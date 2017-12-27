@@ -1,4 +1,8 @@
 # ABM Change Log
+## [0.1.97e] - 2017-27-12
+### Added
+- Human SI now have versus vision (e.g., ladders, cars) in non-competitive modes
+
 ## [0.1.97d] - 2017-27-12
 ### Fixed 
 - g_AutoWave turning off prematurely
