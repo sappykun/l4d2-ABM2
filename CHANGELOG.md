@@ -15,9 +15,6 @@
 ### Fixed
 - Versus Survival is no longer recognized as Scavenge (thanks to kot4404)
 
-### Added
-- Opened a 
-
 ## [0.1.97b] - 2017-18-12
 ### Fixed
 - Switching in Vs between teams spawning dead survivors when 3 or more on server
