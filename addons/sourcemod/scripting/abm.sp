@@ -30,7 +30,7 @@ Free Software Foundation, Inc.
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "0.1.97e"
+#define PLUGIN_VERSION "0.1.97f"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -939,9 +939,8 @@ void SetVDOU(char[] val, any ...) {
 void VDOUnlocker() {
     Echo(2, "VDOUnlocker");
 
-    static bool restore = false;
-
     if (g_cvVDOUHandle != null) {
+        static bool restore = false;
         g_MaxMates = CountTeamMates(2);
 
         if (g_UnlockSI == 2 && g_MaxMates > 4) {
@@ -963,11 +962,13 @@ void VDOUnlocker() {
 void RestoreVDOU() {
     Echo(2, "RestoreVDOU");
 
-    static char origin[2048];
-    origin = g_VDOUOrigin;
-    SetVDOU(g_sB, "","","","","","","","");
-    SetConVarString(g_cvVDOUHandle, g_sB);
-    SetConVarString(g_cvVDOUHandle, origin);
+    if (g_cvVDOUHandle != null) {
+        static char origin[2048];
+        origin = g_VDOUOrigin;
+        SetVDOU(g_sB, "","","","","","","","");
+        SetConVarString(g_cvVDOUHandle, g_sB);
+        SetConVarString(g_cvVDOUHandle, origin);
+    }
 }
 
 void AutoSetTankHp() {
@@ -2763,6 +2764,10 @@ bool TakeoverZombieBotSig(int client, int target, bool si_ghost) {
 
             Unqueue(client);
             SendConVarValue(client, g_cvGameMode, "versus");
+            //SetEntProp(client, Prop_Send, "m_bNightVisionOn", 1);
+            //SetEntProp(client, Prop_Send, "m_bHasNightVision", 1);
+            //SetEntProp(client, Prop_Data, "m_nImpulse", 100, 4);
+
             g_QRecord.SetValue("status", true, true);
             g_AssistedSpawning = true;
             return true;

@@ -1,4 +1,8 @@
 # ABM Change Log
+## [0.1.97f] - 2017-28-12
+### Fixed
+- VDOUnlocker check if g_cvVDOUHandle is valid (could prevent start)
+
 ## [0.1.97e] - 2017-27-12
 ### Added
 - Human SI now have versus vision (e.g., ladders, cars) in non-competitive modes
