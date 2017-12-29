@@ -335,9 +335,12 @@ public void OnMapEnd() {
 
     StopAD();
     StringMapSnapshot keys = g_QDB.Snapshot();
-    SetConVarInt(g_cvMaxSurvivors, g_MinPlayers);
     g_iQueue.Clear();
     g_sQueue.Clear();
+
+    if (!g_IsVs) {
+        SetConVarInt(g_cvMaxSurvivors, g_MinPlayers);
+    }
 
     for (int i; i < keys.Length; i++) {
         keys.GetKey(i, g_sB, sizeof(g_sB));
@@ -1436,15 +1439,15 @@ public Action OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
     if (onteam == 3) {
         int zClass = GetEntProp(target, Prop_Send, "m_zombieClass");
 
-        if (g_UnlockSI != 0) {
-            if (CountTeamMates(3) > g_MaxMates && zClass != 8) {
-                if (IsFakeClient(target)) {
-                    KickClient(target);
+        if (!g_IsVs) {
+            if (g_IsCoop && g_UnlockSI != 0) {
+                if (CountTeamMates(3) > g_MaxMates && zClass != 8) {
+                    if (IsFakeClient(target)) {
+                        KickClient(target);
+                    }
                 }
             }
-        }
 
-        if (!g_IsVs) {
             if (g_AssistedSpawning) {
                 if (zClass == 8) {
 
