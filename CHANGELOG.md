@@ -1,4 +1,15 @@
 # ABM Change Log
+## [0.1.97g] - 2017-29-12
+### Removed
+- abm\_extraplayers cvar (abm_minplayers does this already)
+
+### Changed
+- Cleaned up extraneous code
+
+### Fixed
+- SI attacking survivors at the start safe area under certain conditions
+- Human SI in non-competitive modes randomly changing class or position
+
 ## [0.1.97f] - 2017-28-12
 ### Fixed
 - VDOUnlocker check if g_cvVDOUHandle is valid (could prevent start)
