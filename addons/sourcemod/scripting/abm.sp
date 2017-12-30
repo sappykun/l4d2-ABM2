@@ -30,7 +30,7 @@ Free Software Foundation, Inc.
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "0.1.97g"
+#define PLUGIN_VERSION "0.1.97h"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -202,11 +202,11 @@ public void OnPluginStart() {
     if (g_cvVDOUHandle != null) {
         HookConVarChange(g_cvVDOUHandle, UpdateConVarsHook);
         GetConVarString(g_cvVDOUOrigin, g_VDOUOrigin, sizeof(g_VDOUOrigin));
-        GetConVarString(g_cvVDOUHandle, g_sB, sizeof(g_sB));
+        GetConVarString(g_cvVDOUHandle, g_VDOUCurVal, sizeof(g_VDOUCurVal));
 
         switch (g_VDOUOrigin[0] != ';') {
             case 1: UpdateConVarsHook(g_cvVDOUHandle, g_VDOUOrigin, g_VDOUOrigin);
-            case 0: UpdateConVarsHook(g_cvVDOUHandle, g_sB, g_sB);
+            case 0: UpdateConVarsHook(g_cvVDOUHandle, g_VDOUCurVal, g_VDOUCurVal);
         }
     }
 
@@ -949,8 +949,8 @@ void VDOUnlocker() {
             static char m[3]; static char l[3];
             Format(m, sizeof(m), "%d", g_MaxMates);
             Format(l, sizeof(l), "%d", g_SILimits);
-            SetVDOU(g_sB, m, m, l, l, l, l, l, l);
-            SetConVarString(g_cvVDOUHandle, g_sB);
+            SetVDOU(g_VDOUCurVal, m, m, l, l, l, l, l, l);
+            SetConVarString(g_cvVDOUHandle, g_VDOUCurVal);
             restore = true;
         }
 
@@ -964,11 +964,12 @@ void VDOUnlocker() {
 void RestoreVDOU() {
     Echo(2, "RestoreVDOU");
 
-    if (g_cvVDOUHandle != null) {
+    if (!g_ADFreeze && g_cvVDOUHandle != null) {
         static char origin[2048];
         origin = g_VDOUOrigin;
-        SetVDOU(g_sB, "","","","","","","","");
-        SetConVarString(g_cvVDOUHandle, g_sB);
+
+        SetVDOU(g_VDOUCurVal, "","","","","","","","");
+        SetConVarString(g_cvVDOUHandle, g_VDOUCurVal);
         SetConVarString(g_cvVDOUHandle, origin);
     }
 }
