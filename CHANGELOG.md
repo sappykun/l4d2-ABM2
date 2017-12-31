@@ -1,4 +1,9 @@
 # ABM Change Log
+## [0.1.97i] - 2017-31-12
+### Fixed
+- Human SI getting skipped in queue (when combining unlocksi with spawninterval)
+- Human SI in non-competitive mode fixes and some clean up
+
 ## [0.1.97h] - 2017-30-12
 ### Fixed
 - Server start Vscript Director Options Unlocker errors

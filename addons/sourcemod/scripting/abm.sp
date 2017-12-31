@@ -30,7 +30,7 @@ Free Software Foundation, Inc.
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "0.1.97h"
+#define PLUGIN_VERSION "0.1.97i"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -338,9 +338,9 @@ public void OnMapEnd() {
     g_iQueue.Clear();
     g_sQueue.Clear();
 
-    if (!g_IsVs) {
-        SetConVarInt(g_cvMaxSurvivors, g_MinPlayers);
-    }
+//     if (!g_IsVs) {
+//         SetConVarInt(g_cvMaxSurvivors, g_MinPlayers);
+//     }
 
     for (int i; i < keys.Length; i++) {
         keys.GetKey(i, g_sB, sizeof(g_sB));
@@ -609,7 +609,7 @@ public Action ADTimer(Handle timer) {
 
                 if (AllClientsLoadedIn() && StartAD(5.0)) {
                     RmBots(g_MinPlayers * -1, 2);
-                    SetConVarInt(g_cvMaxSurvivors, MaxClients);
+                    //SetConVarInt(g_cvMaxSurvivors, MaxClients);
                     g_AssistedSpawning = false;
                     g_ADFreeze = false;
                 }
@@ -631,11 +631,11 @@ public Action ADTimer(Handle timer) {
             if (g_tmpOnteam == 3) {
                 if (!g_IsVs) {
                     g_AssistedSpawning = true;
-                }
 
-                if (!g_tmpInspec && GetClientTeam(i) <= 1) {
-                    QueueUp(i, 3);
-                    SwitchTeam(i, 3);
+                    if (!g_tmpInspec && GetClientTeam(i) <= 1) {
+                        QueueUp(i, 3);
+                        AddInfected();
+                    }
                 }
             }
 
@@ -1289,7 +1289,6 @@ bool GetQRtmp(int client) {
                 g_QRtmp.SetString("model", g_tmpModel, true);
             }
 
-            Echo(1, "-t1: %N is model '%s'", client, g_tmpModel);
             result = true;
         }
     }
@@ -1326,7 +1325,6 @@ bool GetQRecord(int client) {
                 g_QRecord.SetString("model", g_model, true);
             }
 
-            Echo(1, "-n1: %N is model '%s'", client, g_model);
             return true;
         }
     }
@@ -1482,7 +1480,7 @@ public Action OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
 
             if (g_iQueue.Length > 0) {
                 client = g_iQueue.Get(0);
-                if (IsClientValid(client) && GetClientTeam(client) <= 1) {
+                if (IsClientValid(client) && !IsPlayerAlive(client)) {
                     SwitchToBot(client, target);
                 }
 
@@ -1610,9 +1608,10 @@ public void OnDeathHook(Handle event, const char[] name, bool dontBroadcast) {
                 g_QRecord.SetString("model", "", true);
 
                 if (!g_IsVs) {
+                    QueueUp(client, 3);
+
                     switch (g_OfferTakeover) {
                         case 2, 3: {
-                            QueueUp(client, 3);
                             GoIdle(client, 1);
                             offerTakeover = true;
                         }
@@ -1872,7 +1871,6 @@ bool AddInfected(char model[32]="", int version=0) {
 
     if (IsClientValid(i)) {
         ChangeClientTeam(i, 3);
-        //GhostsModeProtector(0);
         Format(g_sB, sizeof(g_sB), "%s auto area", model);
 
         switch (version) {
@@ -1881,7 +1879,6 @@ bool AddInfected(char model[32]="", int version=0) {
         }
 
         KickClient(i);
-        //GhostsModeProtector(1);
         return true;
     }
 
@@ -1986,6 +1983,8 @@ void SwitchToBot(int client, int target, bool si_ghost=true) {
     Echo(2, "SwitchToBot: %d %d %d", client, target, si_ghost);
 
     if (IsClientValid(target, 0, 0)) {
+        Unqueue(client);
+
         switch (GetClientTeam(target)) {
             case 2: TakeoverBotSig(client, target);
             case 3: TakeoverZombieBotSig(client, target, si_ghost);
@@ -2198,7 +2197,6 @@ void SwitchTeam(int client, int onteam, char model[32]="") {
                     }
 
                     g_QRecord.SetString("model", model, true);
-                    QueueUp(client, onteam);
 
                     if (onteam == 3) {
                         if (g_IsVs) {  // see if a proper way to get on team 2 exist
@@ -2210,8 +2208,10 @@ void SwitchTeam(int client, int onteam, char model[32]="") {
                             return;
                         }
 
+
+                        QueueUp(client, onteam);
                         g_QRecord.SetString("ghost", model, true);
-                        CreateTimer(g_rdelay, RespawnTimer, client);
+                        CreateTimer(g_rdelay, RespawnTimer, client, TIMER_REPEAT);
                         return;
                     }
 
@@ -2224,10 +2224,18 @@ void SwitchTeam(int client, int onteam, char model[32]="") {
 
 public Action RespawnTimer(Handle Timer, int client) {
     if (g_iQueue.Length > 0 && GetQRecord(client)) {
-        AddInfected(g_ghost, 1);
-        g_QRecord.SetValue("rdelay", g_RespawnDelay, true);
-        g_QRecord.SetString("ghost", "", true);
+        if (AddInfected(g_ghost, 1)) {
+            g_QRecord.SetValue("rdelay", g_RespawnDelay, true);
+            g_QRecord.SetString("ghost", "", true);
+            return Plugin_Stop;
+        }
+
+        else {
+            return Plugin_Continue;
+        }
     }
+
+    return Plugin_Stop;
 }
 
 public Action MkBotsCmd(int client, int args) {
@@ -2695,19 +2703,11 @@ bool TakeoverBotSig(int client, int target) {
 
         else if (IsClientValid(target, 2, 0)) {
             SwitchToSpec(client);
-
-            if (GetRealClient(target) != client) {
-                GetBotCharacter(target, g_model);
-                g_QRecord.SetString("model", g_model, true);
-            }
-
             SetHumanSpecSig(target, client);
             SDKCall(hSwitch, client, true);
 
-            Unqueue(client);
             GetConVarString(g_cvGameMode, g_sB, sizeof(g_sB));
             SendConVarValue(client, g_cvGameMode, g_sB);
-            g_QRecord.SetValue("status", true, true);
             return true;
         }
     }
@@ -2749,8 +2749,6 @@ bool TakeoverZombieBotSig(int client, int target, bool si_ghost) {
         else if (IsClientValid(target, 3, 0) && IsPlayerAlive(target)) {
             SwitchToSpec(client);
             SDKCall(hSwitch, client, target);
-            GetBotCharacter(target, g_model);
-            g_QRecord.SetString("model", g_model, true);
 
             if (si_ghost) {
                 State_TransitionSig(client, 8);
@@ -2759,14 +2757,8 @@ bool TakeoverZombieBotSig(int client, int target, bool si_ghost) {
                 }
             }
 
-            Unqueue(client);
+            // trade off, see ladders, not survivors
             SendConVarValue(client, g_cvGameMode, "versus");
-            //SetEntProp(client, Prop_Send, "m_bNightVisionOn", 1);
-            //SetEntProp(client, Prop_Send, "m_bHasNightVision", 1);
-            //SetEntProp(client, Prop_Data, "m_nImpulse", 100, 4);
-
-            g_QRecord.SetValue("status", true, true);
-            g_AssistedSpawning = true;
             return true;
         }
     }
