@@ -30,7 +30,7 @@ Free Software Foundation, Inc.
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "0.1.97i"
+#define PLUGIN_VERSION "0.1.97j"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -977,16 +977,14 @@ void RestoreVDOU() {
 void AutoSetTankHp() {
     Echo(2, "AutoSetTankHp");
 
-    int tankHp;
-    int teamSize = CountTeamMates(2);
+    static int tankHp;
+    GetConVarDefault(g_cvTankHealth, g_sB, sizeof(g_sB));
+    tankHp = StringToInt(g_sB);
 
-    if (teamSize > 4 || g_AutoHard == 2) {
-        tankHp = teamSize * g_TankChunkHp;
-    }
-
-    if (g_AutoHard == 0 || tankHp == 0) {
-        GetConVarDefault(g_cvTankHealth, g_sB, sizeof(g_sB));
-        tankHp = StringToInt(g_sB);
+    if (g_TankChunkHp != 0 && (g_IsCoop || g_IsVs)) {
+        if (g_AutoHard == 2 || g_MaxMates > 4 && g_AutoHard == 1) {
+            tankHp = g_MaxMates * g_TankChunkHp;
+        }
     }
 
     SetConVarInt(g_cvTankHealth, tankHp);
@@ -1133,10 +1131,8 @@ void RemoveQDBKey(int client) {
         g_QRecord.SetValue("update", true, true);
         g_QRecord.SetString("model", "", true);
 
-        if (g_onteam == 2) {
-            if (CountTeamMates(2) > g_MinPlayers) {
-                CreateTimer(1.0, RmBotsTimer, 1);
-            }
+        if (CountTeamMates(2) > g_MinPlayers) {
+            CreateTimer(1.0, RmBotsTimer, 1);
         }
     }
 }
@@ -2223,6 +2219,8 @@ void SwitchTeam(int client, int onteam, char model[32]="") {
 }
 
 public Action RespawnTimer(Handle Timer, int client) {
+    Echo(2, "RespawnTimer: %d", client);
+
     if (g_iQueue.Length > 0 && GetQRecord(client)) {
         if (AddInfected(g_ghost, 1)) {
             g_QRecord.SetValue("rdelay", g_RespawnDelay, true);
