@@ -30,7 +30,7 @@ Free Software Foundation, Inc.
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "0.1.97j"
+#define PLUGIN_VERSION "0.1.97k"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -69,7 +69,8 @@ char g_SurvivorPaths[8][] = {
 
 int g_OS;                           // 0: Linux, 1: Windows (Prevent crash on Windows /w Zoey)
 char g_sB[512];                     // generic catch all string buffer
-char g_pN[128];                     // a dedicated buffer to storing a players name
+char g_pN[128];                     // a dedicated buffer to storing a temporary name
+char g_name[128], g_tmpName[128];   // g_QDB client name
 int g_client, g_tmpClient;          // g_QDB client id
 int g_target, g_tmpTarget;          // g_QDB player (human or bot) id
 int g_lastid, g_tmpLastid;          // g_QDB client's last known bot id
@@ -164,6 +165,9 @@ public void OnPluginStart() {
     HookEvent("round_freeze_end", RoundFreezeEndHook, EventHookMode_Pre);
     HookEvent("map_transition", RoundFreezeEndHook, EventHookMode_Pre);
     HookEvent("round_start", RoundStartHook, EventHookMode_Pre);
+
+    // base the following on a cvar
+    HookUserMessage(GetUserMessageId("SayText2"), UserMessageHook, true);
 
     RegAdminCmd("abm", MainMenuCmd, ADMFLAG_GENERIC);
     RegAdminCmd("abm-menu", MainMenuCmd, ADMFLAG_GENERIC, "Menu: (Main ABM menu)");
@@ -272,6 +276,36 @@ public void OnPluginStart() {
     AddCommandListener(CmdIntercept, "z_add");
     AutoExecConfig(true, "abm");
     StartAD();
+}
+
+public void OnPluginEnd() {
+    Echo(2, "OnPluginEnd");
+
+    for (int i = 1; i <= MaxClients; i++) {
+        if (GetQRecord(i)) {
+            SetClientName(i, g_name);
+        }
+    }
+}
+
+public Action UserMessageHook(UserMsg MsgId, Handle hBitBuffer, const iPlayers[], int iNumPlayers, bool bReliable, bool bInit) {
+    Echo(2, "UserMessageHook: %d %d %d", iNumPlayers, bReliable, bInit);
+    // thanks https://forums.alliedmods.net/showpost.php?p=914509&postcount=10
+
+    // Skip the first two bytes
+    BfReadByte(hBitBuffer);
+    BfReadByte(hBitBuffer);
+
+    // Read the message
+    static char strMessage[1024];
+    BfReadString(hBitBuffer, strMessage, sizeof(strMessage));
+
+    // If the message equals to the string we want to filter, skip.
+    if (StrEqual(strMessage, "#Cstrike_Name_Change")) {
+        return Plugin_Handled;
+    }
+
+    return Plugin_Continue;
 }
 
 public Action TeamSwitchIntercept(int client, const char[] cmd, int args) {
@@ -507,7 +541,7 @@ public void OnAllSpawnHook(Handle event, const char[] name, bool dontBroadcast) 
     if (GetQRtmp(client)) {
         CreateTimer(0.5, LifeCheckTimer, client);
 
-        if (g_tmpOnteam == 3 && !g_tmpStatus) {
+        if (!g_IsVs && g_tmpOnteam == 3 && !g_tmpStatus) {
             g_QRtmp.SetValue("status", 1, true);
             State_TransitionSig(client, 8);
         }
@@ -1084,9 +1118,17 @@ void GoIdle(int client, int onteam=0) {
     if (GetQRecord(client)) {
         int spec_target;
 
+        // going from idle survivor to infected, leaves an icon behind
+        if (IsClientValid(g_target, 2, 0)) {
+            SwitchToBot(client, g_target);
+        }
+
         if (g_onteam == 2) {
             SwitchToSpec(client);
-            SetHumanSpecSig(g_target, client);
+
+            if (onteam == 0) {
+                SetHumanSpecSig(g_target, client);
+            }
 
             if (onteam == 1) {
                 SwitchToSpec(client);
@@ -1128,6 +1170,7 @@ void RemoveQDBKey(int client) {
     Echo(2, "RemoveQDBKey: %d", client);
 
     if (GetQRecord(client)) {
+        SetClientName(client, g_name);
         g_QRecord.SetValue("update", true, true);
         g_QRecord.SetString("model", "", true);
 
@@ -1279,10 +1322,15 @@ bool GetQRtmp(int client) {
             g_QRtmp.GetValue("rdelay", g_tmpRdelay);
             g_QRtmp.GetString("ghost", g_tmpGhost, sizeof(g_tmpGhost));
             g_QRtmp.GetString("model", g_tmpModel, sizeof(g_tmpModel));
+            g_QRtmp.GetString("name", g_tmpName, sizeof(g_tmpName));
 
             if (g_tmpModel[0] == EOS || g_tmpOnteam == 3) {
                 GetBotCharacter(g_tmpTarget, g_tmpModel);
                 g_QRtmp.SetString("model", g_tmpModel, true);
+
+                if (!g_IsVs && g_tmpOnteam == 3 && IsPlayerAlive(client)) {
+                    SetClientName(client, g_tmpModel);
+                }
             }
 
             result = true;
@@ -1315,10 +1363,15 @@ bool GetQRecord(int client) {
             g_QRecord.GetValue("rdelay", g_rdelay);
             g_QRecord.GetString("ghost", g_ghost, sizeof(g_ghost));
             g_QRecord.GetString("model", g_model, sizeof(g_model));
+            g_QRecord.GetString("name", g_name, sizeof(g_name));
 
             if (g_model[0] == EOS || g_onteam == 3) {
                 GetBotCharacter(g_target, g_model);
                 g_QRecord.SetString("model", g_model, true);
+
+                if (!g_IsVs && g_onteam == 3 && IsPlayerAlive(client)) {
+                    SetClientName(client, g_model);
+                }
             }
 
             return true;
@@ -1346,6 +1399,9 @@ bool NewQRecord(int client) {
     g_QRecord.SetValue("rdelay", g_RespawnDelay, true);
     g_QRecord.SetString("ghost", "", true);
     g_QRecord.SetString("model", "", true);
+
+    GetClientName(client, g_name, sizeof(g_name));
+    g_QRecord.SetString("name", g_name, true);
     return true;
 }
 
@@ -1434,15 +1490,16 @@ public Action OnSpawnHook(Handle event, const char[] name, bool dontBroadcast) {
     if (onteam == 3) {
         int zClass = GetEntProp(target, Prop_Send, "m_zombieClass");
 
-        if (!g_IsVs) {
-            if (g_IsCoop && g_UnlockSI != 0) {
-                if (CountTeamMates(3) > g_MaxMates && zClass != 8) {
-                    if (IsFakeClient(target)) {
-                        KickClient(target);
-                    }
+        if (g_iQueue.Length == 0 && g_UnlockSI != 0) {
+            if (CountTeamMates(3) > g_MaxMates && zClass != 8) {
+                if (IsFakeClient(target)) {
+                    KickClient(target);
+                    return Plugin_Handled;
                 }
             }
+        }
 
+        if (!g_IsVs) {
             if (g_AssistedSpawning) {
                 if (zClass == 8) {
 
@@ -1644,6 +1701,11 @@ public void QTeamHook(Handle event, const char[] name, bool dontBroadcast) {
     int onteam = GetEventInt(event, "team");
 
     if (GetQRecord(client)) {
+
+        if (!g_IsVs && g_onteam == 3) {
+            SetClientName(client, g_name);
+        }
+
         if (onteam >= 2) {
             g_QRecord.SetValue("inspec", false, true);
             g_QRecord.SetValue("target", client, true);
@@ -2701,6 +2763,12 @@ bool TakeoverBotSig(int client, int target) {
 
         else if (IsClientValid(target, 2, 0)) {
             SwitchToSpec(client);
+
+            if (GetRealClient(target) != client) {
+                GetBotCharacter(target, g_model);
+                g_QRecord.SetString("model", g_model, true);
+            }
+
             SetHumanSpecSig(target, client);
             SDKCall(hSwitch, client, true);
 

@@ -1,4 +1,18 @@
 # ABM Change Log
+## [0.1.97k] - 2017-02-01
+### Fixed
+- Respawning infected players spawning in from a setup (Versus)
+- Idle survivors switching to infected leaving an icon behind
+- Tank health modified in versus
+- Prevented players from spawning as SI if no survivors or team limit reached
+- Survivor clones regression
+
+### Added
+- Changing to SI in non-competitive modes now changes players name to class
+
+### Changed
+- If any player from any team leaves, survivors are pruned
+
 ## [0.1.97i] - 2017-31-12
 ### Fixed
 - Human SI getting skipped in queue (when combining unlocksi with spawninterval)
