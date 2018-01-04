@@ -30,7 +30,7 @@ Free Software Foundation, Inc.
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "0.1.97k"
+#define PLUGIN_VERSION "0.1.97l"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -1620,17 +1620,17 @@ public Action ForceSpawnTimer(Handle timer, any client) {
 
             return Plugin_Continue;
         }
+    }
 
-        if (GetClientTeam(client) == 3) {
-            static int x;
-            x = GetConVarInt(FindConVar("z_frustration"));
-            SetEntProp(client, Prop_Send, "m_frustration",!x);
-            PrintHintText(client, "KILL ALL HUMANS");
-            SetEntProp(client, Prop_Send, "m_frustration", x);
+    if (!IsEntityValid(GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon"))) {
+        i = CreateEntityByName("weapon_tank_claw");
+        if (IsEntityValid(i) && DispatchSpawn(i)) {
+            EquipPlayerWeapon(client, i);
         }
     }
 
     i = times[client] = 20;
+    PrintHintText(client, "KILL ALL HUMANS");
     return Plugin_Stop;
 }
 

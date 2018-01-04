@@ -1,4 +1,8 @@
 # ABM Change Log
+## [0.1.97l] - 2017-03-01
+### Fixed
+- Humans Tanks in non-competitive modes are checked for claws
+
 ## [0.1.97k] - 2017-02-01
 ### Fixed
 - Respawning infected players spawning in from a setup (Versus)
