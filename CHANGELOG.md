@@ -1,4 +1,8 @@
 # ABM Change Log
+## [0.1.97n] - 2017-05-01
+### Fixed
+- Quick check if client is in queue against z_*
+
 ## [0.1.97m] - 2017-05-01
 ### Fixed
 - Human SI respawn delays in non-competitve modes

@@ -30,7 +30,7 @@ Free Software Foundation, Inc.
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "0.1.97m"
+#define PLUGIN_VERSION "0.1.97n"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -1977,9 +1977,11 @@ void GhostsModeProtector(int state) {
                         ghosts[i] = 1;
                     }
 
-                    if (GetEntProp(i, Prop_Send, "m_lifeState") == 1) {
-                        SetEntProp(i, Prop_Send, "m_lifeState", 0);
-                        lifeState[i] = 1;
+                    if (!g_tmpQueued) {
+                        if (GetEntProp(i, Prop_Send, "m_lifeState") == 1) {
+                            SetEntProp(i, Prop_Send, "m_lifeState", 0);
+                            lifeState[i] = 1;
+                        }
                     }
                 }
             }
