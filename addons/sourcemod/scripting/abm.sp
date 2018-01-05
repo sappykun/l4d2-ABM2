@@ -30,7 +30,7 @@ Free Software Foundation, Inc.
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "0.1.97l"
+#define PLUGIN_VERSION "0.1.97m"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -83,6 +83,7 @@ char g_model[32], g_tmpModel[32];   // g_QDB client's model
 char g_ghost[32], g_tmpGhost[32];   // g_QDB queued model for SwitchTeam
 float g_origin[3], g_tmpOrigin[3];  // g_QDB client's origin vector
 float g_rdelay, g_tmpRdelay;        // g_QDB delay time for SI respawn
+Handle g_rDelays[MAXPLAYERS + 1];   // Individual respawn SI timers
 int g_models[8];
 
 Handle g_MkBotsTimer;
@@ -569,6 +570,13 @@ bool StopAD() {
         g_AssistedSpawning = false;
         g_survivorSetScan = true;
         g_ADInterval = 0;
+
+        for (int i = 1; i <= MaxClients; i++) {
+            if (g_rDelays[i] != null) {
+                KillTimer(g_rDelays[i]);
+                g_rDelays[i] = null;
+            }
+        }
 
         if (g_MkBotsTimer != null) {
             KillTimer(g_MkBotsTimer);
@@ -1661,7 +1669,7 @@ public void OnDeathHook(Handle event, const char[] name, bool dontBroadcast) {
                 g_QRecord.SetString("model", "", true);
 
                 if (!g_IsVs) {
-                    QueueUp(client, 3);
+                    QueueSI(client, g_rdelay);
 
                     switch (g_OfferTakeover) {
                         case 2, 3: {
@@ -1958,6 +1966,7 @@ void GhostsModeProtector(int state) {
     }
 
     static int ghosts[MAXPLAYERS + 1];
+    static int lifeState[MAXPLAYERS + 1];  // prevent early rise from the dead
 
     switch (state) {
         case 0: {
@@ -1967,6 +1976,11 @@ void GhostsModeProtector(int state) {
                         SetEntProp(i, Prop_Send, "m_isGhost", 0);
                         ghosts[i] = 1;
                     }
+
+                    if (GetEntProp(i, Prop_Send, "m_lifeState") == 1) {
+                        SetEntProp(i, Prop_Send, "m_lifeState", 0);
+                        lifeState[i] = 1;
+                    }
                 }
             }
         }
@@ -1975,8 +1989,14 @@ void GhostsModeProtector(int state) {
             for (int i = 1; i <= MaxClients; i++) {
                 if (ghosts[i] == 1) {
                     SetEntProp(i, Prop_Send, "m_isGhost", 1);
-                    ghosts[i] = 0;
                 }
+
+                if (lifeState[i] == 1) {
+                    SetEntProp(i, Prop_Send, "m_lifeState", 1);
+                }
+
+                ghosts[i] = 0;
+                lifeState[i] = 0;
             }
         }
     }
@@ -2266,10 +2286,9 @@ void SwitchTeam(int client, int onteam, char model[32]="") {
                             return;
                         }
 
-
-                        QueueUp(client, onteam);
+                        g_QRecord.SetValue("onteam", onteam,true);
                         g_QRecord.SetString("ghost", model, true);
-                        CreateTimer(g_rdelay, RespawnTimer, client, TIMER_REPEAT);
+                        QueueSI(client, g_rdelay);
                         return;
                     }
 
@@ -2280,14 +2299,28 @@ void SwitchTeam(int client, int onteam, char model[32]="") {
     }
 }
 
-public Action RespawnTimer(Handle Timer, int client) {
-    Echo(2, "RespawnTimer: %d", client);
+void QueueSI(int client, float delay=1.0) {
+    Echo(2, "QueueSI: %d %f", client, delay);
 
-    if (g_iQueue.Length > 0 && GetQRecord(client)) {
+    if (g_rDelays[client] != null) {
+        KillTimer(g_rDelays[client]);
+        g_rDelays[client] = null;
+    }
+
+    g_rDelays[client] = CreateTimer(
+        delay, QueueSITimer, client, TIMER_REPEAT
+    );
+}
+
+public Action QueueSITimer(Handle Timer, int client) {
+    Echo(2, "QueueSITimer: %d", client);
+
+    if (GetQRecord(client) && g_onteam == 3) {
+        QueueUp(client, 3);
+
         if (AddInfected(g_ghost, 1)) {
             g_QRecord.SetValue("rdelay", g_RespawnDelay, true);
             g_QRecord.SetString("ghost", "", true);
-            return Plugin_Stop;
         }
 
         else {
@@ -2295,6 +2328,7 @@ public Action RespawnTimer(Handle Timer, int client) {
         }
     }
 
+    g_rDelays[client] = null;
     return Plugin_Stop;
 }
 

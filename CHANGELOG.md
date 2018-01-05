@@ -1,4 +1,9 @@
 # ABM Change Log
+## [0.1.97m] - 2017-05-01
+### Fixed
+- Human SI respawn delays in non-competitve modes
+- GhostsModeProtector now also keeps clients dead (preventing z_* respawns)
+
 ## [0.1.97l] - 2017-03-01
 ### Fixed
 - Humans Tanks in non-competitive modes are checked for claws
