@@ -30,7 +30,7 @@ Free Software Foundation, Inc.
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "0.1.97n"
+#define PLUGIN_VERSION "0.1.97o"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -132,6 +132,7 @@ ConVar g_cvMaxSwitches;
 ConVar g_cvGameMode;
 ConVar g_cvVDOUHandle;
 ConVar g_cvVDOUOrigin;
+ConVar g_cvConsistency; char g_consistency[2];
 char g_VDOUCurVal[2048];
 char g_VDOUOrigin[2048];
 
@@ -217,6 +218,8 @@ public void OnPluginStart() {
 
     g_cvTankHealth = FindConVar("z_tank_health");
     g_cvMaxSwitches = FindConVar("vs_max_team_switches");
+    g_cvConsistency = FindConVar("sv_consistency");
+    HookConVarChange(g_cvConsistency, UpdateConVarsHook);
     g_cvGameMode = FindConVar("mp_gamemode");
     HookConVarChange(g_cvGameMode, UpdateConVarsHook);
     UpdateGameMode();
@@ -876,6 +879,10 @@ public void UpdateConVarsHook(Handle convar, const char[] oldCv, const char[] ne
 
     else if (name[0] == 'm' && StrEqual(name, "mp_gamemode")) {
         UpdateGameMode();
+    }
+
+    else if (name[0] == 's' && StrEqual(name, "sv_consistency")) {
+        GetConVarString(g_cvConsistency, g_consistency, sizeof(g_consistency));
     }
 
     else if (name[5] == 'w' && StrEqual(name, "_abm_wrapswitch")) {
@@ -2861,6 +2868,7 @@ bool TakeoverZombieBotSig(int client, int target, bool si_ghost) {
 
             // trade off, see ladders, not survivors
             SendConVarValue(client, g_cvGameMode, "versus");
+            SendConVarValue(client, g_cvConsistency, g_consistency);
             return true;
         }
     }

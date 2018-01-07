@@ -1,4 +1,8 @@
 # ABM Change Log
+## [0.1.97o] - 2017-07-01
+### Fixed
+- Unable to join SI due to sv_consistency issue (due to seeing ladders)
+
 ## [0.1.97n] - 2017-05-01
 ### Fixed
 - Quick check if client is in queue against z_*
