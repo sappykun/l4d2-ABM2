@@ -1,22 +1,22 @@
 # ABM Change Log
-## [0.1.97o] - 2017-07-01
+## [0.1.97o] - 2018-07-01
 ### Fixed
 - Unable to join SI due to sv_consistency issue (due to seeing ladders)
 
-## [0.1.97n] - 2017-05-01
+## [0.1.97n] - 2018-05-01
 ### Fixed
 - Quick check if client is in queue against z_*
 
-## [0.1.97m] - 2017-05-01
+## [0.1.97m] - 2018-05-01
 ### Fixed
 - Human SI respawn delays in non-competitve modes
 - GhostsModeProtector now also keeps clients dead (preventing z_* respawns)
 
-## [0.1.97l] - 2017-03-01
+## [0.1.97l] - 2018-03-01
 ### Fixed
 - Humans Tanks in non-competitive modes are checked for claws
 
-## [0.1.97k] - 2017-02-01
+## [0.1.97k] - 2018-02-01
 ### Fixed
 - Respawning infected players spawning in from a setup (Versus)
 - Idle survivors switching to infected leaving an icon behind
