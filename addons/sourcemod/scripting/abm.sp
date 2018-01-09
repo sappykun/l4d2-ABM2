@@ -3010,7 +3010,7 @@ public void SwitchTeamHandler(int client, int level, char model[32]) {
 
                 if (GetQRecord(menuArg0)) {
                     g_QRecord.SetValue("rdelay", 0.1, true);
-                    SwitchToSpec(client);
+                    SwitchToSpec(menuArg0);
                 }
 
                 SwitchTeam(menuArg0, menuArg1, model);

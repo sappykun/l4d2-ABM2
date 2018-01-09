@@ -1,4 +1,8 @@
 # ABM Change Log
+## [0.1.97p] - 2018-09-01
+### Fixed
+- Admins going spectator when moving people between teams
+
 ## [0.1.97o] - 2018-07-01
 ### Fixed
 - Unable to join SI due to sv_consistency issue (due to seeing ladders)
