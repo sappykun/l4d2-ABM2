@@ -39,7 +39,6 @@
 ### Fixed
 - Server start Vscript Director Options Unlocker errors
 
-# ABM Change Log
 ## [0.1.97g] - 2017-29-12
 ### Removed
 - abm\_extraplayers cvar (abm_minplayers does this already)
