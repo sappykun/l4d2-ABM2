@@ -30,7 +30,7 @@ Free Software Foundation, Inc.
 #pragma semicolon 1
 #pragma newdecls required
 
-#define PLUGIN_VERSION "0.1.97p"
+#define PLUGIN_VERSION "0.1.97q"
 #define LOGFILE "addons/sourcemod/logs/abm.log"  // TODO change this to DATE/SERVER FORMAT?
 
 Handle g_GameData = null;
@@ -356,11 +356,8 @@ public Action CmdIntercept(int client, const char[] cmd, int args) {
     Echo(2, "CmdIntercept: %d %s %d", client, cmd, args);
 
     if (g_AssistedSpawning) {
-        GhostsModeProtector(0);
-        RequestFrame(GhostsModeProtector, 1);
+        GhostsModeProtector();
     }
-
-    return Plugin_Continue;
 }
 
 public void OnMapStart() {
@@ -398,7 +395,8 @@ public void OnMapEnd() {
         }
 
         else if (g_onteam == 3) {
-            SwitchToSpec(g_client);
+            //SwitchToSpec(g_client);
+            g_QRecord.SetValue("status",false, true);
             g_QRecord.SetString("model", "", true);
             QueueUp(g_client,3);
         }
@@ -482,7 +480,9 @@ void PlayerActivate(int client) {
         StartAD();
 
         if (!g_IsVs && g_onteam == 3) {
-            SwitchTeam(client, 3);
+            //SwitchTeam(client, 3);
+            QueueUp(client, 3);
+            AddInfected();
         }
     }
 }
@@ -559,7 +559,9 @@ public void RoundStartHook(Handle event, const char[] name, bool dontBroadcast) 
     for (int i = 1; i <= MaxClients; i++) {
         if (GetQRtmp(i)) {
             if (!g_IsVs && g_tmpOnteam == 3) {
-                SwitchTeam(i, 3);
+                //SwitchTeam(i, 3);
+                QueueUp(i, 3);
+                AddInfected();
             }
         }
     }
@@ -1958,7 +1960,7 @@ bool AddInfected(char model[32]="", int version=0) {
     return false;
 }
 
-void GhostsModeProtector(int state) {
+void GhostsModeProtector(int state=0) {
     Echo(2, "GhostsModeProtector: %d", state);
     // CAREFUL: 0 starts this function and you must close it with 1 or
     // risk breaking things. Close this with 1 immediately when done.
@@ -1968,10 +1970,6 @@ void GhostsModeProtector(int state) {
     // z_spawn_old tank auto;
     // GhostsModeProtector(1);
 
-    if (CountTeamMates(3, 1) == 0) {
-        return;
-    }
-
     static int ghosts[MAXPLAYERS + 1];
     static int lifeState[MAXPLAYERS + 1];  // prevent early rise from the dead
 
@@ -1979,16 +1977,15 @@ void GhostsModeProtector(int state) {
         case 0: {
             for (int i = 1; i <= MaxClients; i++) {
                 if (GetQRtmp(i) && g_tmpOnteam == 3) {
-                    if (GetEntProp(i, Prop_Send, "m_isGhost") == 1) {
+                    if (GetEntProp(i, Prop_Send, "m_isGhost") == 1 || g_tmpQueued) {
                         SetEntProp(i, Prop_Send, "m_isGhost", 0);
                         ghosts[i] = 1;
                     }
 
-                    if (!g_tmpQueued) {
-                        if (GetEntProp(i, Prop_Send, "m_lifeState") == 1) {
-                            SetEntProp(i, Prop_Send, "m_lifeState", 0);
-                            lifeState[i] = 1;
-                        }
+                    if (GetEntProp(i, Prop_Send, "m_lifeState") == 1) {
+                        SetEntProp(i, Prop_Send, "m_lifeState", 0);
+                        g_QRtmp.SetValue("status", 1, true);
+                        lifeState[i] = 1;
                     }
                 }
             }
@@ -2008,6 +2005,10 @@ void GhostsModeProtector(int state) {
                 lifeState[i] = 0;
             }
         }
+    }
+
+    if (state == 0) {
+        RequestFrame(GhostsModeProtector, 1);
     }
 }
 
@@ -2330,10 +2331,6 @@ public Action QueueSITimer(Handle Timer, int client) {
         if (AddInfected(g_ghost, 1)) {
             g_QRecord.SetValue("rdelay", g_RespawnDelay, true);
             g_QRecord.SetString("ghost", "", true);
-        }
-
-        else {
-            return Plugin_Continue;
         }
     }
 

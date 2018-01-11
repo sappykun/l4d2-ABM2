@@ -1,4 +1,11 @@
 # ABM Change Log
+## [0.1.97q] - 2018-10-01
+### Fixed
+- Multiple players on SI in non-competitive modes stuck in spectator
+
+### Changed
+- Keeping SI on SI at the end of a round (experimental)
+
 ## [0.1.97p] - 2018-09-01
 ### Fixed
 - Admins going spectator when moving people between teams
